@@ -15,7 +15,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.absensislametjaya"
-        minSdk = 23 // WAJIB 23, JANGAN flutter.minSdkVersion (21) = CRASH FINGERPRINT + DRIFT
+        minSdk = 23
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
