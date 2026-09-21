@@ -2,28 +2,28 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 part 'database.g.dart';
 
-class KategoriKaryawans extends Table {
+class KategoriKaryawan extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get namaKategori => text()();
   IntColumn get tarifPerJam => integer()();
 }
-class Karyawans extends Table {
+class Karyawan extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get nama => text()();
-  IntColumn get kategoriId => integer().customConstraint('REFERENCES kategori_karyawans(id)')();
+  IntColumn get kategoriId => integer().customConstraint('REFERENCES kategori_karyawan(id)')();
 }
-class Absensis extends Table {
+class Absensi extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawans(id)')();
+  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id)')();
   DateTimeColumn get jamMasuk => dateTime()();
   DateTimeColumn get jamPulang => dateTime().nullable()();
   RealColumn get totalJamKerja => real().withDefault(const Constant(8.0))();
   TextColumn get metode => text()();
   TextColumn get keterangan => text().withDefault(const Constant(''))();
 }
-class GajiMingguans extends Table {
+class GajiMingguan extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawans(id)')();
+  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id)')();
   DateTimeColumn get mingguMulai => dateTime()();
   DateTimeColumn get mingguSelesai => dateTime()();
   RealColumn get totalJam => real()();
@@ -36,7 +36,7 @@ class TransaksiBisnis extends Table {
   IntColumn get nominal => integer()();
   DateTimeColumn get tanggal => dateTime()();
 }
-class AuditLogs extends Table {
+class AuditLog extends Table {
   IntColumn get id => integer().autoIncrement()();
   DateTimeColumn get waktu => dateTime().withDefault(currentDateAndTime)();
   TextColumn get aktor => text()();
@@ -46,16 +46,16 @@ class AuditLogs extends Table {
   TextColumn get status => text()();
 }
 
-@DriftDatabase(tables: [KategoriKaryawans, Karyawans, Absensis, GajiMingguans, TransaksiBisnis, AuditLogs])
+@DriftDatabase(tables: [KategoriKaryawan, Karyawan, Absensi, GajiMingguan, TransaksiBisnis, AuditLog])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'tb_slamet_jaya_v4_final'));
   @override int get schemaVersion => 1;
 
   Future<void> catatAudit({required String aktor, required String aksi, required String target, required String detail}) async {
-    await into(auditLogs).insert(AuditLogsCompanion.insert(
+    await into(auditLog).insert(AuditLogCompanion.insert(
       aktor: aktor, aksi: aksi, target: target, detail: detail,
-      status: aksi.contains('MANUAL') || aksi.contains('HAPUS')? 'MENCURIGAKAN' : 'AMAN',
-      waktu: DateTime.now(),
+      status: aksi.contains('MANUAL')? 'MENCURIGAKAN' : 'AMAN',
+      waktu: Value(DateTime.now()),
     ));
   }
 
@@ -64,14 +64,14 @@ class AppDatabase extends _$AppDatabase {
     final senin = now.subtract(Duration(days: now.weekday - 1));
     final seninStart = DateTime(senin.year, senin.month, senin.day);
     final mingguEnd = seninStart.add(const Duration(days: 6, hours: 23, minutes: 59));
-    for (var kat in await select(kategoriKaryawans).get()) {
-      for (var kar in await (select(karyawans)..where((t) => t.kategoriId.equals(kat.id))).get()) {
-        final absenMinggu = await (select(absensis)..where((t) => t.karyawanId.equals(kar.id) & t.jamMasuk.isBiggerOrEqualValue(seninStart) & t.jamMasuk.isSmallerOrEqualValue(mingguEnd))).get();
+    for (var kat in await select(kategoriKaryawan).get()) {
+      for (var kar in await (select(karyawan)..where((t) => t.kategoriId.equals(kat.id))).get()) {
+        final absenMinggu = await (select(absensi)..where((t) => t.karyawanId.equals(kar.id) & t.jamMasuk.isBiggerOrEqualValue(seninStart) & t.jamMasuk.isSmallerOrEqualValue(mingguEnd))).get();
         double totalJam = absenMinggu.fold(0.0, (p, e) => p + e.totalJamKerja);
         int totalGaji = (totalJam * kat.tarifPerJam).toInt();
-        await (delete(gajiMingguans)..where((t) => t.karyawanId.equals(kar.id) & t.mingguMulai.equals(seninStart))).go();
+        await (delete(gajiMingguan)..where((t) => t.karyawanId.equals(kar.id) & t.mingguMulai.equals(seninStart))).go();
         if (totalJam > 0) {
-          await into(gajiMingguans).insert(GajiMingguanCompanion.insert(
+          await into(gajiMingguan).insert(GajiMingguanCompanion.insert(
             karyawanId: kar.id, mingguMulai: seninStart, mingguSelesai: mingguEnd, totalJam: totalJam, totalGaji: totalGaji,
           ));
         }
@@ -82,7 +82,7 @@ class AppDatabase extends _$AppDatabase {
   Future<Map<String, int>> hitungLabaBulanan(DateTime bulan) async {
     final awal = DateTime(bulan.year, bulan.month, 1);
     final akhir = DateTime(bulan.year, bulan.month + 1, 0, 23, 59);
-    final gajiBulan = await (select(gajiMingguans)..where((t) => t.mingguMulai.isBiggerOrEqualValue(awal) & t.mingguMulai.isSmallerOrEqualValue(akhir))).get();
+    final gajiBulan = await (select(gajiMingguan)..where((t) => t.mingguMulai.isBiggerOrEqualValue(awal) & t.mingguMulai.isSmallerOrEqualValue(akhir))).get();
     int bebanGaji = gajiBulan.fold(0, (p, e) => p + e.totalGaji);
     final pendapatanList = await (select(transaksiBisnis)..where((t) => t.jenis.equals('PENDAPATAN') & t.tanggal.isBetweenValues(awal, akhir))).get();
     int pendapatan = pendapatanList.fold(0, (p, e) => p + e.nominal);
