@@ -1,18 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-<!-- WAJIB UNTUK FINGERPRINT ALAT BLUETOOTH BLE -->
-       <uses-permission android:name="android.permission.BLUETOOTH" />
-       <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-<!-- Android 12+ (API 31+) -->
-       <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
-       <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-<!-- Android 10-11 butuh lokasi biar bisa scan BLE -->
-       <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-       <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<!-- FINGERPRINT ALAT BLUETOOTH + FINGERPRINT HP -->
+<uses-permission android:name="android.permission.BLUETOOTH" />
+<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+<uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.USE_BIOMETRIC" />
+<uses-permission android:name="android.permission.USE_FINGERPRINT" />
+<!-- KAMERA + STORAGE BUAT FOTO KARYAWAN -->
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
-<!-- WAJIB JIKA MASIH PAKAI FINGERPRINT HP JUGA (local_auth) -->
-        <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-        <uses-permission android:name="android.permission.USE_FINGERPRINT" />
-        <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+<uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+<uses-feature android:name="android.hardware.fingerprint" android:required="false" />
+<uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="Absensi Slamet Jaya"
         android:name="${applicationName}"
