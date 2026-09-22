@@ -5,7 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
-import '../database.dart';
+import '../dbases/localdatabase.dart';
+import '../dbases/setowner_db.dart';
+import '../dbases/audit_db.dart';
 
 class SettingOwnerPage extends StatefulWidget { const SettingOwnerPage({super.key}); @override State<SettingOwnerPage> createState() => _SettingOwnerPageState(); }
 class _SettingOwnerPageState extends State<SettingOwnerPage> {
