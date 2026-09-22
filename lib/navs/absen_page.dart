@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:drift/drift.dart' as drift;
 import 'dart:io';
+import 'package:permission_handler/permission_handler.dart'; // <-- TAMBAHAN IJIN
 import '../dbases/localdatabase.dart';
 import '../dbases/absen_db.dart';
 import '../dbases/audit_db.dart';
 import '../dbases/gaji_db.dart';
-import '../dbases/setowner_db.dart'; // <-- INI FIX NYA, TAMBAHAN BIAR watchKaryawan() KEDETEKSI
+import '../dbases/setowner_db.dart';
 
 class AbsenPage extends StatefulWidget {
   const AbsenPage({super.key});
@@ -16,9 +17,48 @@ class AbsenPage extends StatefulWidget {
 class _AbsenPageState extends State<AbsenPage> {
   final db = AppDatabase();
   final auth = LocalAuthentication();
+  String _statusIjin = "Cek ijin...";
+
+  @override
+  void initState() {
+    super.initState();
+    _requestSemuaIjinAndroid();
+  }
+
+  // TAMBAHAN: REQUEST SEMUA IJIN SEKALIGUS - KAMERA, STORAGE, LOKASI, BLUETOOTH, SENSOR FINGERPRINT
+  Future<void> _requestSemuaIjinAndroid() async {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.camera,
+      Permission.storage,
+      Permission.photos,
+      Permission.location,
+      Permission.locationWhenInUse,
+      Permission.bluetooth,
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+      Permission.bluetoothAdvertise,
+      Permission.sensors, // untuk fingerprint HP
+    ].request();
+
+    bool allGranted = statuses.values.every((s) => s.isGranted || s.isLimited);
+    setState(() {
+      _statusIjin = allGranted ? "Semua ijin OK" : "Ada ijin ditolak, cek setting HP";
+    });
+
+    // Jika ada yang permanentlyDenied, buka setting
+    if (statuses.values.any((s) => s.isPermanentlyDenied)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Ada ijin ditolak permanen. Buka Pengaturan > Aplikasi > TB Slamet Jaya > Izin")),
+        );
+      }
+    }
+  }
 
   Future<bool> _cekFingerprintSupport() async {
     try {
+      // TAMBAHAN: minta ijin sensor dulu
+      await Permission.sensors.request();
       final canCheck = await auth.canCheckBiometrics;
       final isDeviceSupported = await auth.isDeviceSupported();
       final available = await auth.getAvailableBiometrics();
@@ -29,6 +69,7 @@ class _AbsenPageState extends State<AbsenPage> {
   }
 
   Future<void> _prosesFingerprint(KaryawanData k, KategoriKaryawanData? kat) async {
+    await _requestSemuaIjinAndroid(); // TAMBAHAN: pastikan ijin OK sebelum scan
     final support = await _cekFingerprintSupport();
     if (!support) {
       if (!mounted) return;
@@ -250,6 +291,7 @@ class _AbsenPageState extends State<AbsenPage> {
                       subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text("Kategori: ${kat?.namaKategori ?? 'Terhapus'}"),
                         Text("Gaji: Rp ${kat?.tarifPerJam ?? 0}/jam", style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(_statusIjin, style: const TextStyle(fontSize: 10, color: Colors.grey)),
                       ]),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(
