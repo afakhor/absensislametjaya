@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../database.dart';
 import '../export_pdf.dart';
+import '../dbases/localdatabase.dart';
+import '../dbases/gaji_db.dart'; // untuk gaji_page
 
 class GajiPage extends StatelessWidget { const GajiPage({super.key}); @override Widget build(BuildContext context) { final db = AppDatabase(); return Scaffold(appBar: AppBar(title: const Text("Gaji Mingguan"), actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: () => db.prosesHitungGajiMingguan())]), body: StreamBuilder<List<GajiMingguanData>>(stream: db.select(db.gajiMingguan).watch(), builder: (c, s) { if (!s.hasData) return const Center(child: CircularProgressIndicator()); return ListView.builder(itemCount: s.data!.length, itemBuilder: (_, i) { var g = s.data![i]; return FutureBuilder<KaryawanData?>(future: (db.select(db.karyawan)..where((t) => t.id.equals(g.karyawanId))).getSingleOrNull(), builder: (c, kar) { return ListTile(title: Text(kar.data?.nama?? "ID ${g.karyawanId}"), subtitle: Text("${g.totalJam} Jam"), trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text("Rp ${g.totalGaji}"), IconButton(icon: const Icon(Icons.picture_as_pdf), onPressed: () async { if (kar.data == null) return; var kat = await (db.select(db.kategoriKaryawan)..where((t) => t.id.equals(kar.data!.kategoriId))).getSingle(); var absen = await (db.select(db.absensi)..where((t) => t.karyawanId.equals(g.karyawanId))).get(); await ExportPdfTBSlametJaya.exportSlipGajiMingguan(karyawan: kar.data!, kategori: kat, gaji: g, absensiMingguIni: absen); })])); }); }); })); } }
