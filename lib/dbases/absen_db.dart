@@ -2,13 +2,14 @@ import 'package:drift/drift.dart';
 import 'localdatabase.dart';
 
 extension AbsenDao on AppDatabase {
-  Future<void> absenFingerprint(int karyawanId, String nama) async {
+  // FIX: yang benar cuma 1 argumen ID, biar auto sync ID, Nama, Kategori
+  Future<void> absenFingerprint(int karyawanId) async {
     await into(absensi).insert(AbsensiCompanion.insert(
       karyawanId: karyawanId,
       jamMasuk: DateTime.now(),
       totalJamKerja: const Value(8.0),
       metode: 'FINGERPRINT',
-      keterangan: const Value('Valid'),
+      keterangan: const Value('Valid - Auto sync ID'),
     ));
   }
 
