@@ -11,7 +11,21 @@ class Karyawan extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get nama => text()();
   IntColumn get kategoriId => integer().customConstraint('REFERENCES kategori_karyawan(id)')();
+  TextColumn get fotoPath => text().nullable()(); // <--- TAMBAHAN FOTO
 }
+
+// di bawah ganti schemaVersion
+@override
+int get schemaVersion => 2;
+
+@override
+MigrationStrategy get migration => MigrationStrategy(
+  onUpgrade: (migrator, from, to) async {
+    if (from == 1) {
+      await migrator.addColumn(karyawan, karyawan.fotoPath);
+    }
+  },
+);
 class Absensi extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id)')();
