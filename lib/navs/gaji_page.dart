@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:drift/drift.dart' as drift;
 import '../export_pdf.dart';
 import '../dbases/localdatabase.dart';
 import '../dbases/gaji_db.dart';
@@ -60,7 +61,7 @@ class _GajiPageState extends State<GajiPage> {
           ),
           Expanded(
             child: StreamBuilder<List<GajiMingguanData>>(
-              stream: (db.select(db.gajiMingguan)..orderBy([(t) => OrderingTerm.desc(t.mingguMulai)])).watch(),
+              stream: (db.select(db.gajiMingguan)..orderBy([(t) => drift.OrderingTerm.desc(t.mingguMulai)])).watch(),
               builder: (c, s) {
                 if (!s.hasData) return const Center(child: CircularProgressIndicator());
                 final filtered = s.data!.where((g) => g.mingguMulai.month == _bulan.month && g.mingguMulai.year == _bulan.year).toList();
@@ -75,7 +76,7 @@ class _GajiPageState extends State<GajiPage> {
                       future: (db.select(db.karyawan)..where((t) => t.id.equals(g.karyawanId))).getSingleOrNull(),
                       builder: (c, kar) {
                         return FutureBuilder<List<AbsensiData>>(
-                          future: (db.select(db.absensi)..where((t) => t.karyawanId.equals(g.karyawanId) & t.jamMasuk.isBiggerOrEqualValue(g.mingguMulai) & t.jamMasuk.isSmallerOrEqualValue(g.mingguSelesai))).get(),
+                          future: (db.select(db.absensi)..where((t) => t.karyawanId.equals(g.karyawanId) & t.jamMasuk.isBetweenValues(g.mingguMulai, g.mingguSelesai))).get(),
                           builder: (c, absSnap) {
                             final list = absSnap.data ?? [];
                             final full = list.where((a) => a.tipeKerja == 'FULL').length;
