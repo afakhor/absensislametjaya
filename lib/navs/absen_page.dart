@@ -6,6 +6,7 @@ import '../dbases/localdatabase.dart';
 import '../dbases/absen_db.dart';
 import '../dbases/audit_db.dart';
 import '../dbases/gaji_db.dart';
+import '../dbases/setowner_db.dart'; // <-- INI FIX NYA, TAMBAHAN BIAR watchKaryawan() KEDETEKSI
 
 class AbsenPage extends StatefulWidget {
   const AbsenPage({super.key});
