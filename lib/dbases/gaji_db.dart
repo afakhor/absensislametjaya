@@ -2,10 +2,8 @@ import 'package:drift/drift.dart';
 import 'localdatabase.dart';
 
 extension GajiDao on AppDatabase {
-  // REQUIRED HARIAN CONTINUE - Hitung gaji mingguan Senin-Minggu
   Future<void> prosesHitungGajiMingguan() async {
     final now = DateTime.now();
-    // Senin jam 00:00 minggu ini
     final senin = now.subtract(Duration(days: now.weekday - 1));
     final seninStart = DateTime(senin.year, senin.month, senin.day);
     final mingguEnd = seninStart.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
@@ -15,12 +13,10 @@ extension GajiDao on AppDatabase {
       final kat = await (select(kategoriKaryawan)..where((t) => t.id.equals(kar.kategoriId))).getSingleOrNull();
       if (kat == null) continue;
 
-      // Ambil absen minggu ini - REQUIRED TIAP HARI
       final absenMinggu = await (select(absensi)
             ..where((t) => t.karyawanId.equals(kar.id) & t.jamMasuk.isBetweenValues(seninStart, mingguEnd)))
           .get();
 
-      // Gak absen = gak masuk = gak gajian
       if (absenMinggu.isEmpty) {
         await (delete(gajiMingguan)..where((t) => t.karyawanId.equals(kar.id) & t.mingguMulai.equals(seninStart))).go();
         continue;
@@ -36,17 +32,15 @@ extension GajiDao on AppDatabase {
           .getSingleOrNull();
 
       if (existing == null) {
-        if (totalJam > 0) {
-          await into(gajiMingguan).insert(GajiMingguanCompanion.insert(
-            karyawanId: kar.id,
-            mingguMulai: seninStart,
-            mingguSelesai: mingguEnd,
-            totalJam: totalJam,
-            totalGaji: totalGaji,
-            totalBonus: Value(totalBonus),
-            totalHariMasuk: Value(absenMinggu.length),
-          ));
-        }
+        await into(gajiMingguan).insert(GajiMingguanCompanion.insert(
+          karyawanId: kar.id,
+          mingguMulai: seninStart,
+          mingguSelesai: mingguEnd,
+          totalJam: totalJam,
+          totalGaji: totalGaji,
+          totalBonus: Value(totalBonus),
+          totalHariMasuk: Value(absenMinggu.length),
+        ));
       } else {
         await (update(gajiMingguan)..where((t) => t.id.equals(existing.id))).write(
           GajiMingguanCompanion(
@@ -64,6 +58,8 @@ extension GajiDao on AppDatabase {
 
   Future<int> getTotalGajianSemua() async {
     final all = await select(gajiMingguan).get();
-    return all.fold(0, (p, e) => p + e.totalGaji);
+    int total = 0;
+    for (var e in all) { total += e.totalGaji; }
+    return total;
   }
 }
