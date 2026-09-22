@@ -33,17 +33,17 @@ extension AbsenDao on AppDatabase {
     ));
   }
 
-  // WATCH KARYAWAN - DARI FILE 1
+  // WATCH KARYAWAN - CUMA ADA DISINI, JANGAN BIKIN LAGI DI setowner_db.dart
   Stream<List<KaryawanData>> watchKaryawan() => select(karyawan).watch();
 
-  // REQUIRED HARIAN - WATCH ABSEN PER TANGGAL - DARI FILE 1 - UNTUK FITUR GAK ABSEN = GAK MASUK
+  // REQUIRED HARIAN - WATCH ABSEN PER TANGGAL - UNTUK FITUR GAK ABSEN = GAK MASUK = GAK GAJIAN
   Stream<List<AbsensiData>> watchAbsensiHari(DateTime tgl) {
     final start = DateTime(tgl.year, tgl.month, tgl.day);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59);
     return (select(absensi)..where((a) => a.jamMasuk.isBetweenValues(start, end))).watch();
   }
 
-  // WATCH ABSENSI PER KARYAWAN - DARI FILE 2 - TETAP ADA
+  // WATCH ABSENSI PER KARYAWAN - TETAP ADA
   Stream<List<AbsensiData>> watchAbsensiKaryawan(int karyawanId) {
     return (select(absensi)..where((t) => t.karyawanId.equals(karyawanId))).watch();
   }
