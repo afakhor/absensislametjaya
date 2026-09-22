@@ -18,6 +18,7 @@ class _AbsenPageState extends State<AbsenPage> {
   final db = AppDatabase();
   final auth = LocalAuthentication();
   String _statusIjin = "Cek ijin...";
+  DateTime _tglPilih = DateTime.now(); // TAMBAHAN: REQUIRED HARIAN CONTINUE
 
   @override
   void initState() {
@@ -42,7 +43,7 @@ class _AbsenPageState extends State<AbsenPage> {
 
     bool allGranted = statuses.values.every((s) => s.isGranted || s.isLimited);
     setState(() {
-      _statusIjin = allGranted ? "Semua ijin OK" : "Ada ijin ditolak, cek setting HP";
+      _statusIjin = allGranted? "Semua ijin OK" : "Ada ijin ditolak, cek setting HP";
     });
 
     // Jika ada yang permanentlyDenied, buka setting
@@ -68,6 +69,79 @@ class _AbsenPageState extends State<AbsenPage> {
     }
   }
 
+  // TAMBAHAN BARU: DIALOG OWNER TENTUKAN 1 HARI / ½ HARI + BONUS - JANGAN DIKURANGI, INI TAMBAHAN
+  Future<void> _dialogTipeKerjaDanBonus(KaryawanData k, KategoriKaryawanData? kat, {required bool isFingerprint}) async {
+    String tipe = 'FULL';
+    double jam = 8.0;
+    final bonusC = TextEditingController(text: "0");
+    final alasanC = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text("Absen ${k.nama} - ID:${k.id}", style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Owner tentukan: 1 hari atau ½ hari", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              RadioListTile<String>(
+                title: const Text("1 Hari (8 jam)"),
+                value: 'FULL',
+                groupValue: tipe,
+                onChanged: (v) { setD(() { tipe = v!; jam = 8.0; }); },
+              ),
+              RadioListTile<String>(
+                title: const Text("½ Hari (4 jam)"),
+                value: 'SETENGAH',
+                groupValue: tipe,
+                onChanged: (v) { setD(() { tipe = v!; jam = 4.0; }); },
+              ),
+              TextField(
+                controller: bonusC,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: "Bonus (Owner tentukan)", prefixText: "Rp ", border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: alasanC,
+                decoration: const InputDecoration(labelText: "Keterangan", border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Batal")),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.save),
+              label: const Text("SIMPAN ABSEN"),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+              onPressed: () async {
+                int bonus = int.tryParse(bonusC.text.replaceAll('.', ''))?? 0;
+                Navigator.pop(ctx);
+                await db.into(db.absensi).insert(AbsensiCompanion.insert(
+                  karyawanId: k.id,
+                  jamMasuk: DateTime(_tglPilih.year, _tglPilih.month, _tglPilih.day, DateTime.now().hour, DateTime.now().minute),
+                  totalJamKerja: drift.Value(jam),
+                  metode: isFingerprint? 'FINGERPRINT' : 'MANUAL_OWNER_ID:${k.id}',
+                  keterangan: drift.Value(alasanC.text.isEmpty? (tipe == 'FULL'? "Kerja Full" : "Setengah Hari") : alasanC.text),
+                  tipeKerja: drift.Value(tipe),
+                  bonus: drift.Value(bonus),
+                ));
+                await db.catatAudit(
+                  aktor: isFingerprint? k.nama : 'OWNER',
+                  aksi: isFingerprint? 'ABSEN_FINGERPRINT' : 'MANUAL_OVERRIDE',
+                  target: "ID:${k.id} - ${k.nama} - ${kat?.namaKategori}",
+                  detail: "Tgl ${_tglPilih.day}/${_tglPilih.month}/${_tglPilih.year} Tipe $tipe ${jam}jam Bonus Rp $bonus | ${alasanC.text}",
+                );
+                await db.prosesHitungGajiMingguan();
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("✅ Absen sukses ID:${k.id} ${k.nama} $tipe ${jam}jam Bonus Rp $bonus")));
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _prosesFingerprint(KaryawanData k, KategoriKaryawanData? kat) async {
     await _requestSemuaIjinAndroid(); // TAMBAHAN: pastikan ijin OK sebelum scan
     final support = await _cekFingerprintSupport();
@@ -79,23 +153,13 @@ class _AbsenPageState extends State<AbsenPage> {
 
     try {
       bool ok = await auth.authenticate(
-        localizedReason: 'Absen ${k.nama} - ID:${k.id} - ${kat?.namaKategori ?? ""}',
+        localizedReason: 'Absen ${k.nama} - ID:${k.id} - ${kat?.namaKategori?? ""}',
         options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
       );
       if (!ok) return;
 
-      // AUTO SIMPAN FINGERPRINT SESUAI ID, NAMA, KATEGORI TERDAFTAR
-      await db.absenFingerprint(k.id);
-      await db.catatAudit(
-        aktor: k.nama,
-        aksi: 'ABSEN_FINGERPRINT',
-        target: "ID:${k.id} - ${k.nama} - ${kat?.namaKategori ?? 'Tanpa Kategori'}",
-        detail: 'Fingerprint valid 8 jam - Kategori ${kat?.namaKategori} - Tarif ${kat?.tarifPerJam}/jam',
-      );
-      await db.prosesHitungGajiMingguan();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("✅ Absen sukses ID:${k.id} ${k.nama} (${kat?.namaKategori})")));
+      // TAMBAHAN: SEKARANG PAKAI DIALOG 1 HARI / ½ HARI + BONUS
+      await _dialogTipeKerjaDanBonus(k, kat, isFingerprint: true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fingerprint gagal: $e")));
@@ -121,15 +185,15 @@ class _AbsenPageState extends State<AbsenPage> {
                 children: [
                   const Text("Ketik ID Karyawan (Auto Complete)", style: TextStyle(fontSize: 12)),
                   const SizedBox(height: 8),
-                  // AUTO SUGGESTIONS ID KARYAWAN + NAMA + KATEGORI
+                  // AUTO SUGGESTIONS ID KARYAWAN + NAMA + KATEGORI - TETAP ADA TIDAK DIKURANGI
                   StreamBuilder<List<KaryawanData>>(
                     stream: db.watchKaryawan(),
                     builder: (context, snapKaryawan) {
-                      final listKaryawan = snapKaryawan.data ?? [];
+                      final listKaryawan = snapKaryawan.data?? [];
                       return FutureBuilder<List<KategoriKaryawanData>>(
                         future: db.select(db.kategoriKaryawan).get(),
                         builder: (context, snapKat) {
-                          final listKategori = snapKat.data ?? [];
+                          final listKategori = snapKat.data?? [];
                           Map<int, KategoriKaryawanData> katMap = {for (var k in listKategori) k.id: k};
 
                           return Autocomplete<KaryawanData>(
@@ -184,11 +248,11 @@ class _AbsenPageState extends State<AbsenPage> {
                                         final k = options.elementAt(i);
                                         final kat = katMap[k.kategoriId];
                                         return ListTile(
-                                          leading: k.fotoPath != null
-                                              ? ClipOval(child: Image.file(File(k.fotoPath!), width: 35, height: 35, fit: BoxFit.cover))
+                                          leading: k.fotoPath!= null
+                                             ? ClipOval(child: Image.file(File(k.fotoPath!), width: 35, height: 35, fit: BoxFit.cover))
                                               : CircleAvatar(child: Text(k.id.toString())),
                                           title: Text("ID:${k.id} - ${k.nama}"),
-                                          subtitle: Text("${kat?.namaKategori ?? 'Tanpa Kategori'} - Rp ${kat?.tarifPerJam ?? 0}/jam"),
+                                          subtitle: Text("${kat?.namaKategori?? 'Tanpa Kategori'} - Rp ${kat?.tarifPerJam?? 0}/jam"),
                                           onTap: () => onSelected(k),
                                         );
                                       },
@@ -203,8 +267,8 @@ class _AbsenPageState extends State<AbsenPage> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  // AUTO SINKRON TAMPILAN
-                  if (karyawanTerpilih != null)
+                  // AUTO SINKRON TAMPILAN - TETAP ADA
+                  if (karyawanTerpilih!= null)
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
@@ -213,8 +277,8 @@ class _AbsenPageState extends State<AbsenPage> {
                         children: [
                           Text("ID Karyawan: ${karyawanTerpilih!.id}", style: const TextStyle(fontWeight: FontWeight.bold)),
                           Text("Nama Karyawan: ${karyawanTerpilih!.nama}"),
-                          Text("Kategori: ${kategoriTerpilih?.namaKategori ?? 'Terhapus'}"),
-                          Text("Gaji: Rp ${kategoriTerpilih?.tarifPerJam ?? 0}/jam", style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold)),
+                          Text("Kategori: ${kategoriTerpilih?.namaKategori?? 'Terhapus'}"),
+                          Text("Gaji: Rp ${kategoriTerpilih?.tarifPerJam?? 0}/jam", style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -226,27 +290,14 @@ class _AbsenPageState extends State<AbsenPage> {
             actions: [
               TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
               ElevatedButton.icon(
-                icon: const Icon(Icons.save),
-                label: const Text("SIMPAN MANUAL"),
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text("LANJUT PILIH HARI & BONUS"),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
                 onPressed: karyawanTerpilih == null
-                    ? null
-                    : () async {
-                        await db.into(db.absensi).insert(AbsensiCompanion.insert(
-                          karyawanId: karyawanTerpilih!.id,
-                          jamMasuk: DateTime.now(),
-                          totalJamKerja: const drift.Value(8.0),
-                          metode: 'MANUAL_OWNER_ID:${karyawanTerpilih!.id}',
-                          keterangan: drift.Value(alasanC.text.isEmpty ? 'Manual Owner' : alasanC.text),
-                        ));
-                        await db.catatAudit(
-                          aktor: 'OWNER',
-                          aksi: 'MANUAL_OVERRIDE',
-                          target: "ID:${karyawanTerpilih!.id} - ${karyawanTerpilih!.nama}",
-                          detail: "Kategori: ${kategoriTerpilih?.namaKategori} | Alasan: ${alasanC.text}",
-                        );
-                        await db.prosesHitungGajiMingguan();
-                        if (context.mounted) Navigator.pop(context);
+                   ? null
+                    : () {
+                        Navigator.pop(context);
+                        _dialogTipeKerjaDanBonus(karyawanTerpilih!, kategoriTerpilih, isFingerprint: false);
                       },
               ),
             ],
@@ -259,6 +310,21 @@ class _AbsenPageState extends State<AbsenPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Text("Absen Wajib ${_tglPilih.day}/${_tglPilih.month}/${_tglPilih.year} - ${_tglPilih.year}"),
+        backgroundColor: Colors.orange.shade800,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_today),
+            onPressed: () async {
+              final p = await showDatePicker(context: context, initialDate: _tglPilih, firstDate: DateTime(2023), lastDate: DateTime(2030));
+              if (p!= null) setState(() => _tglPilih = p);
+            },
+          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: () => db.prosesHitungGajiMingguan()),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.admin_panel_settings),
         label: const Text("Input Manual pakai ID"),
@@ -271,36 +337,51 @@ class _AbsenPageState extends State<AbsenPage> {
         builder: (c, s) {
           if (!s.hasData) return const Center(child: CircularProgressIndicator());
           if (s.data!.isEmpty) return const Center(child: Text("Belum ada karyawan. Ke menu Owner dulu\nTambah Karyawan + Foto + Kategori"));
-          return ListView.builder(
-            itemCount: s.data!.length,
-            padding: const EdgeInsets.only(bottom: 80),
-            itemBuilder: (_, i) {
-              var k = s.data![i];
-              return FutureBuilder<KategoriKaryawanData?>(
-                future: (db.select(db.kategoriKaryawan)..where((t) => t.id.equals(k.kategoriId))).getSingleOrNull(),
-                builder: (c, katSnap) {
-                  final kat = katSnap.data;
-                  return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    elevation: 2,
-                    child: ListTile(
-                      leading: k.fotoPath != null
-                          ? ClipOval(child: Image.file(File(k.fotoPath!), width: 50, height: 50, fit: BoxFit.cover))
-                          : CircleAvatar(backgroundColor: Colors.orange.shade100, child: Text(k.id.toString(), style: TextStyle(color: Colors.orange.shade800))),
-                      title: Text("ID:${k.id} - ${k.nama}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text("Kategori: ${kat?.namaKategori ?? 'Terhapus'}"),
-                        Text("Gaji: Rp ${kat?.tarifPerJam ?? 0}/jam", style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text(_statusIjin, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                      ]),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(
-                          icon: const Icon(Icons.fingerprint, color: Colors.green, size: 32),
-                          tooltip: "Fingerprint ID:${k.id}",
-                          onPressed: () => _prosesFingerprint(k, kat),
+          return StreamBuilder<List<AbsensiData>>(
+            stream: db.watchAbsensiHari(_tglPilih),
+            builder: (c, absenSnap) {
+              final absenHariIni = absenSnap.data?? [];
+              return ListView.builder(
+                itemCount: s.data!.length,
+                padding: const EdgeInsets.only(bottom: 80),
+                itemBuilder: (_, i) {
+                  var k = s.data![i];
+                  return FutureBuilder<KategoriKaryawanData?>(
+                    future: (db.select(db.kategoriKaryawan)..where((t) => t.id.equals(k.kategoriId))).getSingleOrNull(),
+                    builder: (c, katSnap) {
+                      final kat = katSnap.data;
+                      final absenKaryawan = absenHariIni.where((a) => a.karyawanId == k.id).toList();
+                      final sudahAbsen = absenKaryawan.isNotEmpty;
+                      return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        elevation: 2,
+                        color: sudahAbsen? Colors.green.shade50 : Colors.red.shade50,
+                        child: ListTile(
+                          leading: k.fotoPath!= null
+                             ? ClipOval(child: Image.file(File(k.fotoPath!), width: 50, height: 50, fit: BoxFit.cover))
+                              : CircleAvatar(backgroundColor: Colors.orange.shade100, child: Text(k.id.toString(), style: TextStyle(color: Colors.orange.shade800))),
+                          title: Text("ID:${k.id} - ${k.nama}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text("Kategori: ${kat?.namaKategori?? 'Terhapus'}"),
+                            Text("Gaji: Rp ${kat?.tarifPerJam?? 0}/jam", style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text(
+                              sudahAbsen
+                                 ? "✅ SUDAH ABSEN ${absenKaryawan.first.tipeKerja} ${absenKaryawan.first.totalJamKerja}jam Bonus Rp ${absenKaryawan.first.bonus}"
+                                  : "❌ BELUM ABSEN - GAK MASUK - GAK GAJIAN - WAJIB TGL ${_tglPilih.day}/${_tglPilih.month}/${_tglPilih.year}",
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: sudahAbsen? Colors.green.shade700 : Colors.red),
+                            ),
+                            Text(_statusIjin, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                          ]),
+                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                            IconButton(
+                              icon: Icon(sudahAbsen? Icons.check_circle : Icons.fingerprint, color: Colors.green, size: 32),
+                              tooltip: "Fingerprint ID:${k.id}",
+                              onPressed: sudahAbsen? null : () => _prosesFingerprint(k, kat),
+                            ),
+                          ]),
                         ),
-                      ]),
-                    ),
+                      );
+                    },
                   );
                 },
               );
