@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:drift/drift.dart' as drift;
 import 'dart:io';
-import '../database.dart';
+import '../dbases/localdatabase.dart';
+import '../dbases/absen_db.dart';
+import '../dbases/audit_db.dart';
+import '../dbases/gaji_db.dart';
 
 class AbsenPage extends StatefulWidget { const AbsenPage({super.key}); @override State<AbsenPage> createState() => _AbsenPageState(); }
 class _AbsenPageState extends State<AbsenPage> {
   final db = AppDatabase(); final auth = LocalAuthentication();
   @override Widget build(BuildContext context) {
-    return Scaffold(body: StreamBuilder<List<KaryawanData>>(stream: db.select(db.karyawan).watch(), builder: (c, s) {
+    return Scaffold(body: StreamBuilder<List<KaryawanData>>(stream: db.watchKaryawan(), builder: (c, s) {
       if (!s.hasData) return const Center(child: CircularProgressIndicator());
       if (s.data!.isEmpty) return const Center(child: Text("Belum ada karyawan. Ke menu Owner"));
       return ListView.builder(itemCount: s.data!.length, itemBuilder: (_, i) {
@@ -21,7 +24,7 @@ class _AbsenPageState extends State<AbsenPage> {
             IconButton(icon: const Icon(Icons.fingerprint, color: Colors.green), onPressed: () async {
               bool ok = await auth.authenticate(localizedReason: 'Absen ${k.nama}', options: const AuthenticationOptions(biometricOnly: true));
               if (!ok) return;
-              await db.into(db.absensi).insert(AbsensiCompanion.insert(karyawanId: k.id, jamMasuk: DateTime.now(), totalJamKerja: const drift.Value(8.0), metode: 'FINGERPRINT', keterangan: const drift.Value('Valid')));
+              await db.absenFingerprint(k.id);
               await db.catatAudit(aktor: k.nama, aksi: 'ABSEN_FINGERPRINT', target: k.nama, detail: '8 jam');
               await db.prosesHitungGajiMingguan();
             }),
