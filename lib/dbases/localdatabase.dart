@@ -7,12 +7,14 @@ class KategoriKaryawan extends Table {
   TextColumn get namaKategori => text()();
   IntColumn get tarifPerJam => integer()();
 }
+
 class Karyawan extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get nama => text()();
   IntColumn get kategoriId => integer().customConstraint('REFERENCES kategori_karyawan(id)')();
   TextColumn get fotoPath => text().nullable()();
 }
+
 class Absensi extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id)')();
@@ -21,7 +23,11 @@ class Absensi extends Table {
   RealColumn get totalJamKerja => real().withDefault(const Constant(8.0))();
   TextColumn get metode => text()();
   TextColumn get keterangan => text().withDefault(const Constant(''))();
+  // TAMBAHAN BARU - UNTUK FITUR 1 HARI / ½ HARI + BONUS OWNER - JANGAN DIKURANGI
+  TextColumn get tipeKerja => text().withDefault(const Constant('FULL'))(); // FULL / SETENGAH
+  IntColumn get bonus => integer().withDefault(const Constant(0))();
 }
+
 class GajiMingguan extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id)')();
@@ -29,7 +35,11 @@ class GajiMingguan extends Table {
   DateTimeColumn get mingguSelesai => dateTime()();
   RealColumn get totalJam => real()();
   IntColumn get totalGaji => integer()();
+  // TAMBAHAN BARU - UNTUK TOTAL GAJIAN DI NAVIGASI GAJI
+  IntColumn get totalBonus => integer().withDefault(const Constant(0))();
+  IntColumn get totalHariMasuk => integer().withDefault(const Constant(0))();
 }
+
 class Transaksi extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get jenis => text()();
@@ -37,6 +47,7 @@ class Transaksi extends Table {
   IntColumn get nominal => integer()();
   DateTimeColumn get tanggal => dateTime()();
 }
+
 class AuditLog extends Table {
   IntColumn get id => integer().autoIncrement()();
   DateTimeColumn get waktu => dateTime().withDefault(currentDateAndTime)();
@@ -46,7 +57,8 @@ class AuditLog extends Table {
   TextColumn get detail => text()();
   TextColumn get status => text()();
 }
-// TAMBAHAN BARU - LOG SIMULASI LABA
+
+// TAMBAHAN BARU - LOG SIMULASI LABA - TETAP ADA TIDAK DIKURANGI
 class SimulasiLaba extends Table {
   IntColumn get id => integer().autoIncrement()();
   DateTimeColumn get tanggalSimulasi => dateTime().withDefault(currentDateAndTime)();
@@ -67,13 +79,19 @@ class SimulasiLaba extends Table {
 @DriftDatabase(tables: [KategoriKaryawan, Karyawan, Absensi, GajiMingguan, Transaksi, AuditLog, SimulasiLaba])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'tb_slamet_jaya_v5_owner_foto'));
-  @override int get schemaVersion => 2;
+  @override int get schemaVersion => 3;
   @override MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async => await m.createAll(),
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await m.createTable(simulasiLaba);
       }
-    }
+      if (from < 3) {
+        await m.addColumn(absensi, absensi.tipeKerja);
+        await m.addColumn(absensi, absensi.bonus);
+        await m.addColumn(gajiMingguan, gajiMingguan.totalBonus);
+        await m.addColumn(gajiMingguan, gajiMingguan.totalHariMasuk);
+      }
+    },
   );
 }
