@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../database.dart';
 import '../export_pdf.dart';
+import '../dbases/localdatabase.dart';
+import '../dbases/laba_db.dart'; // untuk laba_page
 
 class LabaPage extends StatefulWidget { const LabaPage({super.key}); @override State<LabaPage> createState() => _LabaPageState(); }
 class _LabaPageState extends State<LabaPage> {
