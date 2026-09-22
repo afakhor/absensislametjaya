@@ -11,21 +11,8 @@ class Karyawan extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get nama => text()();
   IntColumn get kategoriId => integer().customConstraint('REFERENCES kategori_karyawan(id)')();
-  TextColumn get fotoPath => text().nullable()(); // <--- TAMBAHAN FOTO
+  TextColumn get fotoPath => text().nullable()();
 }
-
-// di bawah ganti schemaVersion
-@override
-int get schemaVersion => 2;
-
-@override
-MigrationStrategy get migration => MigrationStrategy(
-  onUpgrade: (migrator, from, to) async {
-    if (from == 1) {
-      await migrator.addColumn(karyawan, karyawan.fotoPath);
-    }
-  },
-);
 class Absensi extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id)')();
@@ -45,7 +32,7 @@ class GajiMingguan extends Table {
 }
 class Transaksi extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get jenis => text()(); // PENDAPATAN / BEBAN_OPERASIONAL
+  TextColumn get jenis => text()();
   TextColumn get keterangan => text()();
   IntColumn get nominal => integer()();
   DateTimeColumn get tanggal => dateTime()();
@@ -62,13 +49,14 @@ class AuditLog extends Table {
 
 @DriftDatabase(tables: [KategoriKaryawan, Karyawan, Absensi, GajiMingguan, Transaksi, AuditLog])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'tb_slamet_jaya_v4_final'));
+  // GANTI NAMA DB JADI V5 BIAR GAK PERLU MIGRASI
+  AppDatabase() : super(driftDatabase(name: 'tb_slamet_jaya_v5_owner_foto'));
   @override int get schemaVersion => 1;
 
   Future<void> catatAudit({required String aktor, required String aksi, required String target, required String detail}) async {
     await into(auditLog).insert(AuditLogCompanion.insert(
       aktor: aktor, aksi: aksi, target: target, detail: detail,
-      status: aksi.contains('MANUAL') ? 'MENCURIGAKAN' : 'AMAN',
+      status: aksi.contains('MANUAL')? 'MENCURIGAKAN' : 'AMAN',
       waktu: Value(DateTime.now()),
     ));
   }
