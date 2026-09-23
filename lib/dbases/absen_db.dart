@@ -6,9 +6,9 @@ extension AbsenDao on AppDatabase {
     await into(absensi).insert(AbsensiCompanion.insert(
       karyawanId: karyawanId,
       jamMasuk: DateTime.now(),
-      totalJamKerja: Value(tipe == 'FULL' ? 8.0 : 4.0),
+      totalJamKerja: Value(tipe == 'FULL'? 8.0 : 4.0),
       metode: 'FINGERPRINT',
-      keterangan: Value(alasan.isEmpty ? 'Valid - Auto sync ID' : alasan),
+      keterangan: Value(alasan.isEmpty? 'Valid - Auto sync ID' : alasan),
       tipeKerja: Value(tipe),
     ));
   }
@@ -17,19 +17,21 @@ extension AbsenDao on AppDatabase {
     await into(absensi).insert(AbsensiCompanion.insert(
       karyawanId: karyawanId,
       jamMasuk: DateTime.now(),
-      totalJamKerja: Value(tipe == 'FULL' ? 8.0 : 4.0),
+      totalJamKerja: Value(tipe == 'FULL'? 8.0 : 4.0),
       metode: 'MANUAL_OWNER',
       keterangan: Value(alasan),
       tipeKerja: Value(tipe),
     ));
   }
 
-  Stream<List<KaryawanData>> watchKaryawan() => select(karyawan).watch();
+  // watchKaryawan() DIHAPUS DARI SINI, PINDAH KE setowner_db.dart BIAR GAK DOUBLE
   Stream<List<AbsensiData>> watchAbsensiHari(DateTime tgl) {
     final start = DateTime(tgl.year, tgl.month, tgl.day);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59);
-    return (select(absensi)..where((a) => a.jamMasuk.isBetweenValues(start, end))).watch();
+    // FIX: PAKAI MAP BIAR BUILD RELEASE LOLOS, JANGAN PAKAI isBetweenValues
+    return select(absensi).watch().map((list) => list.where((a) => a.jamMasuk.isAfter(start.subtract(const Duration(seconds:1))) && a.jamMasuk.isBefore(end.add(const Duration(seconds:1)))).toList());
   }
+
   Stream<List<AbsensiData>> watchAbsensiKaryawan(int karyawanId) {
     return (select(absensi)..where((t) => t.karyawanId.equals(karyawanId))).watch();
   }
