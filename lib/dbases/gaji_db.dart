@@ -13,53 +13,60 @@ extension GajiDao on AppDatabase {
       final kat = await (select(kategoriKaryawan)..where((t) => t.id.equals(kar.kategoriId))).getSingleOrNull();
       if (kat == null) continue;
 
-      final absenMinggu = await (select(absensi)
-            ..where((t) => t.karyawanId.equals(kar.id) & t.jamMasuk.isBetweenValues(seninStart, mingguEnd)))
-          .get();
+      final absenMinggu = await (select(absensi)..where((t) => t.karyawanId.equals(kar.id) & t.jamMasuk.isBetweenValues(seninStart, mingguEnd))).get();
+      if (absenMinggu.isEmpty) continue;
 
-      if (absenMinggu.isEmpty) {
-        await (delete(gajiMingguan)..where((t) => t.karyawanId.equals(kar.id) & t.mingguMulai.equals(seninStart))).go();
-        continue;
-      }
+      double hariEfektif = 0;
+      for (var a in absenMinggu) { hariEfektif += (a.tipeKerja == 'SETENGAH' ? 0.5 : 1.0); }
+      int gajiPokok = (hariEfektif * kat.tarifPerHari).toInt();
 
-      double totalJam = absenMinggu.fold(0.0, (p, e) => p + e.totalJamKerja);
-      int totalBonus = absenMinggu.fold(0, (p, e) => p + e.bonus);
-      int gajiPokok = (totalJam * kat.tarifPerJam).toInt();
-      int totalGaji = gajiPokok + totalBonus;
-
-      final existing = await (select(gajiMingguan)
-            ..where((t) => t.karyawanId.equals(kar.id) & t.mingguMulai.equals(seninStart)))
-          .getSingleOrNull();
-
+      final existing = await (select(gajiMingguan)..where((t) => t.karyawanId.equals(kar.id) & t.mingguMulai.equals(seninStart))).getSingleOrNull();
       if (existing == null) {
         await into(gajiMingguan).insert(GajiMingguanCompanion.insert(
-          karyawanId: kar.id,
-          mingguMulai: seninStart,
-          mingguSelesai: mingguEnd,
-          totalJam: totalJam,
-          totalGaji: totalGaji,
-          totalBonus: Value(totalBonus),
-          totalHariMasuk: Value(absenMinggu.length),
+          karyawanId: kar.id, mingguMulai: seninStart, mingguSelesai: mingguEnd,
+          totalHariEfektif: Value(hariEfektif), totalHariMasuk: Value(absenMinggu.length),
+          totalJam: Value(absenMinggu.fold(0.0, (p, e) => p + e.totalJamKerja)),
+          totalGajiPokok: Value(gajiPokok), bonusMingguan: const Value(0), totalGaji: gajiPokok, totalBonus: const Value(0),
+          statusBayar: const Value('BELUM'),
         ));
       } else {
         await (update(gajiMingguan)..where((t) => t.id.equals(existing.id))).write(
           GajiMingguanCompanion(
-            totalJam: Value(totalJam),
-            totalGaji: Value(totalGaji),
-            totalBonus: Value(totalBonus),
-            totalHariMasuk: Value(absenMinggu.length),
+            totalHariEfektif: Value(hariEfektif), totalHariMasuk: Value(absenMinggu.length),
+            totalGajiPokok: Value(gajiPokok), totalGaji: Value(gajiPokok + existing.bonusMingguan),
           ),
         );
       }
     }
   }
 
-  Stream<List<GajiMingguanData>> watchGaji() => select(gajiMingguan).watch();
+  Future<void> inputBonusMingguan(int gajiId, int bonus) async {
+    final g = await (select(gajiMingguan)..where((t) => t.id.equals(gajiId))).getSingle();
+    await (update(gajiMingguan)..where((t) => t.id.equals(gajiId))).write(
+      GajiMingguanCompanion(bonusMingguan: Value(bonus), totalBonus: Value(bonus), totalGaji: Value(g.totalGajiPokok + bonus)),
+    );
+  }
 
-  Future<int> getTotalGajianSemua() async {
-    final all = await select(gajiMingguan).get();
-    int total = 0;
-    for (var e in all) { total += e.totalGaji; }
-    return total;
+  Future<void> tandaiBayar(int gajiId, String status) async {
+    await (update(gajiMingguan)..where((t) => t.id.equals(gajiId))).write(
+      GajiMingguanCompanion(statusBayar: Value(status), tanggalBayar: Value(DateTime.now())),
+    );
+  }
+
+  Stream<List<GajiMingguanData>> watchGaji() => select(gajiMingguan).watch();
+  Future<int> getTotalGajianSemua() async => (await select(gajiMingguan).get()).fold(0, (p, e) => p + e.totalGaji);
+
+  // UNTUK HALAMAN LABA - AKUMULASI DARI AWAL SAMPAI CONTINUE
+  Future<int> getAkumulasiBebanGaji({int? karyawanId, int? kategoriId, DateTime? mulai, DateTime? selesai}) async {
+    var q = select(gajiMingguan);
+    if (karyawanId != null) q.where((t) => t.karyawanId.equals(karyawanId));
+    if (mulai != null) q.where((t) => t.mingguMulai.isBiggerOrEqualValue(mulai));
+    if (selesai != null) q.where((t) => t.mingguSelesai.isSmallerOrEqualValue(selesai));
+    var list = await q.get();
+    if (kategoriId != null) {
+      final ids = (await (select(karyawan)..where((k) => k.kategoriId.equals(kategoriId))).get()).map((e) => e.id).toSet();
+      list = list.where((g) => ids.contains(g.karyawanId)).toList();
+    }
+    return list.fold(0, (p, e) => p + e.totalGaji);
   }
 }
