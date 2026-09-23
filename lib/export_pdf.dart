@@ -14,7 +14,7 @@ class ExportPdfTBSlametJaya {
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
       pw.Text("TB. SLAMET JAYA", style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.orange800)),
-      pw.Text("Jl. Raya Toko Bangunan - Telp: 08xx-xxxx-xxxx", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+      pw.Text("DUSUN JRANJANG RT 12/RW 6 KELURAHAN KERTOSUKO KECAMATAN KRUCIL KABUPATEN PROBOLINGGO (082229109246)", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
       pw.SizedBox(height: 8),
       pw.Text(title, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
       pw.Text(sub, style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
@@ -45,7 +45,7 @@ class ExportPdfTBSlametJaya {
     pdf.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
       build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        _header("SLIP GAJI MINGGUAN - GAJI/HARI", "${_fmtTgl.format(gaji.mingguMulai)} - ${_fmtTgl.format(gaji.mingguSelesai)}"),
+        _header("SLIP GAJI MINGGUAN KARYAWAN TB. SLAMET JAYA", "${_fmtTgl.format(gaji.mingguMulai)} - ${_fmtTgl.format(gaji.mingguSelesai)}"),
         pw.Container(padding: const pw.EdgeInsets.all(8), decoration: pw.BoxDecoration(color: PdfColors.grey100, borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4))), child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Text("ID: ${karyawan.id} - Nama: ${karyawan.nama}", style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
           pw.Text("Kategori: ${kategori.namaKategori} - Rp ${_fmtRp.format(kategori.tarifPerHari)}/hari | Rata Bintang: ${rataBintang.toStringAsFixed(1)} ⭐"),
@@ -98,21 +98,21 @@ class ExportPdfTBSlametJaya {
       build: (c) => [
         _header("LABA & BEBAN GAJI CONTINUE - AUTO DARI DASHBOARD", "$filterInfo | ${ _fmtTgl.format(periodeMulai)} - ${ _fmtTgl.format(periodeSelesai)}"),
         pw.Container(padding: const pw.EdgeInsets.all(10), decoration: pw.BoxDecoration(color: PdfColors.orange50, borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6))), child: pw.Column(children: [
-          _row("TOTAL AKUMULASI BEBAN GAJI (auto dari Log)", totalBebanGaji, bold: true),
-          _row("Omset (auto dari Log Live)", totalOmset),
-          _row("Beban Operasional (auto)", totalBebanOps, color: PdfColors.red800),
+          _row("TOTAL AKUMULASI GAJI KARYAWAN", totalBebanGaji, bold: true),
+          _row("Omset TB. SLAMET", totalOmset),
+          _row("Beban Operasional", totalBebanOps, color: PdfColors.red800),
           _row("Tambahan Lain", totalTambahan),
           pw.Divider(),
           _row("Total Pemasukan", totalPemasukan, bold: true),
           _row("Total Beban", totalBeban, bold: true, color: PdfColors.red800),
           pw.Divider(thickness: 1.5),
-          _row("Laba Kotor", labaKotor, bold: true, color: PdfColors.green700),
+          _row("LABA KOTOR", labaKotor, bold: true, color: PdfColors.green700),
           _row("LABA BERSIH", labaBersih, bold: true, color: labaBersih>=0? PdfColors.green800 : PdfColors.red800),
         ])),
         pw.SizedBox(height: 12),
-        pw.Text("RINCIAN LOG LIVE TERSIMPAN (per tanggal sama kayak Absensi)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+        pw.Text("RINCIAN TERSIMPAN", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
         pw.TableHelper.fromTextArray(
-          headers: ["Tanggal","Penjualan","Beban Ops","Tambahan","Gaji Hari","Kotor","Bersih","Ket"],
+          headers: ["Tanggal","Penjualan","Beban Ops","Tambahan","Gaji","Kotor","Bersih","Ket"],
           data: logLiveList.map((l)=> [ _fmtTgl.format(l.tanggal), "Rp ${_fmtRp.format(l.totalPenjualan)}", "Rp ${_fmtRp.format(l.bebanOperasional)}", "Rp ${_fmtRp.format(l.tambahanLain)}", "Rp ${_fmtRp.format(l.totalGajiHariIni)}", "Rp ${_fmtRp.format(l.labaKotor)}", "Rp ${_fmtRp.format(l.labaBersih)}", l.keteranganTambahan]).toList(),
           headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
           headerDecoration: const pw.BoxDecoration(color: PdfColors.orange800),
@@ -135,8 +135,8 @@ class ExportPdfTBSlametJaya {
     pdf.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       build: (c) => [
-        _header("FULL DATA - LOG LIVE & ABSENSI", "Periode: ${_fmtTgl.format(periodeMulai)} - ${_fmtTgl.format(periodeSelesai)} | Total ${allLaporan.length} hari log & ${allAbsensi.length} absen"),
-        pw.Text("LOG AKUMULASI BEBAN GAJI - DARI AWAL SAMPAI CONTINUE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+        _header("DATA KESELURUHAN", "Periode: ${_fmtTgl.format(periodeMulai)} - ${_fmtTgl.format(periodeSelesai)} | Total ${allLaporan.length} hari log & ${allAbsensi.length} absen"),
+        pw.Text("AKUMULASI GAJI SAMPAI SAAT INI", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
         pw.TableHelper.fromTextArray(
           headers: ["Tanggal","Penjualan","Ops","Tambahan","Gaji","Kotor","Bersih"],
           data: allLaporan.map((l)=> [ _fmtTgl.format(l.tanggal), _fmtRp.format(l.totalPenjualan), _fmtRp.format(l.bebanOperasional), _fmtRp.format(l.tambahanLain), _fmtRp.format(l.totalGajiHariIni), _fmtRp.format(l.labaKotor), _fmtRp.format(l.labaBersih)]).toList(),
@@ -145,7 +145,7 @@ class ExportPdfTBSlametJaya {
           cellStyle: const pw.TextStyle(fontSize: 7),
         ),
         pw.SizedBox(height: 16),
-        pw.Text("LOG ABSENSI PER TANGGAL (Dashboard Tab Absensi)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+        pw.Text("LOG ABSENSI PER TANGGAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
         pw.TableHelper.fromTextArray(
           headers: ["Tanggal Jam","ID-Nama","Tipe","Jam","Metode","Keterangan"],
           data: allAbsensi.map((a){
@@ -172,9 +172,9 @@ class ExportPdfTBSlametJaya {
     pdf.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       build: (c) => [
-        _header("LOG AKUMULASI BEBAN GAJI - DARI AWAL SAMPAI CONTINUE", filterInfo),
+        _header("AKUMULASI GAJI KARYAWAN SAMPAI SAAT INI", filterInfo),
         pw.Container(padding: const pw.EdgeInsets.all(12), decoration: pw.BoxDecoration(color: PdfColors.grey200, border: pw.Border.all(color: PdfColors.grey400)), child: pw.Column(children: [
-          _row("TOTAL AKUMULASI BEBAN GAJI CONTINUE", totalAkumulasi, bold: true),
+          _row("AKUMULASI GAJI KARYAWAN SAMPAI SAAT INI", totalAkumulasi, bold: true),
           pw.Text("Jumlah Transaksi: ${listGaji.length} | Total Hari Efektif: ${listGaji.fold(0.0, (p,e)=>p+e.totalHariEfektif)} hari", style: const pw.TextStyle(fontSize: 9)),
         ])),
         pw.SizedBox(height: 12),
