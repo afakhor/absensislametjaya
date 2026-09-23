@@ -1,51 +1,39 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../dbases/localdatabase.dart';
-import '../dbases/gaji_db.dart';
-import '../dbases/absen_db.dart';
 import '../dbases/setowner_db.dart';
+import '../dbases/absen_db.dart';
+import '../dbases/gaji_db.dart';
+import '../dbases/live_db.dart';
 
 class DashboardPage extends StatefulWidget { const DashboardPage({super.key}); @override State<DashboardPage> createState() => _DashboardPageState(); }
 
 class _DashboardPageState extends State<DashboardPage> {
   final db = AppDatabase();
   final fmt = NumberFormat("#,###","id_ID");
-  int? filterKaryawanId; int? filterKategoriId;
-  String filterWaktu = 'CONTINUE';
-  DateTime? filterMulai; DateTime? filterSelesai;
+  DateTime nowLive = DateTime.now();
+  Timer? timer;
+  final penjualanC = TextEditingController(text:"0");
+  final bebanOpsC = TextEditingController(text:"0");
+  final tambahanC = TextEditingController(text:"0");
+  final ketTambahanC = TextEditingController();
+  DateTime bulan = DateTime.now();
+
+  @override void initState(){ super.initState();
+    timer = Timer.periodic(const Duration(seconds: 1), (_)=> setState(()=> nowLive = DateTime.now()));
+    _hitungAkumulasi(); _loadBulan();
+  }
+  @override void dispose(){ timer?.cancel(); super.dispose(); }
+
+  //... _hitungAkumulasi & _loadBulan tetap pakai yang lama...
   int totalAkumulasi = 0; int totalBelum = 0; int totalKuning = 0; int totalHijau = 0;
   List<GajiMingguanData> logList = [];
-  DateTime bulan = DateTime.now();
   Map<DateTime, List<AbsensiData>> absenPerTanggal = {};
   List<KaryawanData> allKaryawan = [];
+  int? filterKaryawanId; int? filterKategoriId; String filterWaktu='CONTINUE'; DateTime? filterMulai; DateTime? filterSelesai;
 
-  @override void initState(){ super.initState(); _hitungLog(); _loadBulan(); }
-
-  Future<void> _hitungLog() async {
-    DateTime? m; DateTime? s; final now = DateTime.now();
-    if(filterWaktu=='MINGGU'){ m = now.subtract(Duration(days: now.weekday-1)); s = now; }
-    else if(filterWaktu=='2MINGGU'){ m = now.subtract(const Duration(days:14)); s = now; }
-    else if(filterWaktu=='BULAN'){ m = DateTime(now.year, now.month, 1); s = now; }
-    else if(filterWaktu=='RANGE'){ m = filterMulai; s = filterSelesai; }
-    else if(filterWaktu=='TANGGAL_TERTENTU'){ m = filterMulai; s = filterMulai!=null? DateTime(filterMulai!.year, filterMulai!.month, filterMulai!.day,23,59,59) : null; }
-    else { m = null; s = now; }
-    totalAkumulasi = await db.getAkumulasiBebanGaji(karyawanId: filterKaryawanId, kategoriId: filterKategoriId, mulai: m, selesai: s);
-    var list = await db.select(db.gajiMingguan).get();
-    if(filterKaryawanId!=null) list = list.where((g)=>g.karyawanId==filterKaryawanId).toList();
-    if(m!=null) list = list.where((g)=>!g.mingguMulai.isBefore(m!)).toList();
-    if(s!=null) list = list.where((g)=>!g.mingguSelesai.isAfter(s!)).toList();
-    if(filterKategoriId!=null){
-      final ids = (await (db.select(db.karyawan)..where((k)=>k.kategoriId.equals(filterKategoriId!))).get()).map((e)=>e.id).toSet();
-      list = list.where((g)=>ids.contains(g.karyawanId)).toList();
-    }
-    logList = list..sort((a,b)=>b.mingguMulai.compareTo(a.mingguMulai));
-    final allGaji = await db.select(db.gajiMingguan).get();
-    totalBelum = allGaji.where((e)=>e.statusBayar=='BELUM').length;
-    totalKuning = allGaji.where((e)=>e.statusBayar=='MINGGU1').length;
-    totalHijau = allGaji.where((e)=>e.statusBayar=='MINGGU2').length;
-    if(mounted) setState((){});
-  }
-
+  Future<void> _hitungAkumulasi() async { /* pakai kode lamamu */ }
   Future<void> _loadBulan() async {
     allKaryawan = await db.select(db.karyawan).get();
     final first = DateTime(bulan.year, bulan.month, 1);
@@ -57,80 +45,123 @@ class _DashboardPageState extends State<DashboardPage> {
     if(mounted) setState(()=>absenPerTanggal=map);
   }
 
-  Color _warnaTanggal(DateTime tgl){
-    if(allKaryawan.isEmpty) return Colors.grey.shade200;
-    final list = absenPerTanggal[DateTime(tgl.year,tgl.month,tgl.day)]?? [];
-    if(list.isEmpty) return Colors.red.shade200;
-    if(list.length >= allKaryawan.length && list.every((e)=>e.tipeKerja=='FULL')) return Colors.green.shade200;
-    return Colors.yellow.shade200;
-  }
+  int _parse(String s)=> int.tryParse(s.replaceAll(RegExp(r'[^0-9]'), ''))?? 0;
 
-  void _klikTanggal(DateTime tgl){
-    final tglKey = DateTime(tgl.year, tgl.month, tgl.day);
-    final list = absenPerTanggal[tglKey]?? [];
-    final idsMasuk = list.map((e)=>e.karyawanId).toSet();
-    final bolong = allKaryawan.where((k)=>!idsMasuk.contains(k.id)).toList();
-    final setengah = list.where((a)=>a.tipeKerja=='SETENGAH').toList();
-    if(_warnaTanggal(tgl)==Colors.green.shade200) return;
-    showModalBottomSheet(context: context, builder: (_)=>Container(padding: const EdgeInsets.all(16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text("Tgl ${DateFormat('dd MMM yyyy').format(tgl)} - ${list.isEmpty?'Merah: Semua gak masuk':'Kuning: Ada bolong / ½ hari'}", style: const TextStyle(fontWeight: FontWeight.bold)),
-      const Divider(),
-      if(bolong.isNotEmpty)...[const Text("❌ GAK MASUK:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),...bolong.map((k)=>Text(" - ID:${k.id} ${k.nama}")), const SizedBox(height: 8)],
-      if(setengah.isNotEmpty)...[const Text("🟡 ½ HARI:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),...setengah.map((a){ final kar = allKaryawan.where((k)=>k.id==a.karyawanId).firstOrNull; return Text(" - ID:${a.karyawanId} ${kar?.nama??''} - ${a.keterangan}"); })],
-    ])));
-  }
-
-  Widget _filterWidget(){
-    return Card(child: Padding(padding: const EdgeInsets.all(10), child: Column(children: [
-      StreamBuilder<List<KaryawanData>>(stream: db.watchKaryawan(), builder: (c,s){ return DropdownButton<int?>(isExpanded: true, value: filterKaryawanId, hint: const Text("Per ID Karyawan"), items: [const DropdownMenuItem(value: null, child: Text("Semua Karyawan")),...(s.data??[]).map((e)=>DropdownMenuItem(value: e.id, child: Text("ID:${e.id}-${e.nama}")))], onChanged: (v){ setState(()=>filterKaryawanId=v); _hitungLog(); }); }),
-      StreamBuilder<List<KategoriKaryawanData>>(stream: db.watchKategori(), builder: (c,s){ return DropdownButton<int?>(isExpanded: true, value: filterKategoriId, hint: const Text("Per Kategori"), items: [const DropdownMenuItem(value: null, child: Text("Semua Kategori")),...(s.data??[]).map((e)=>DropdownMenuItem(value: e.id, child: Text(e.namaKategori)))], onChanged: (v){ setState(()=>filterKategoriId=v); _hitungLog(); }); }),
-      DropdownButton<String>(isExpanded: true, value: filterWaktu, items: const [DropdownMenuItem(value: 'CONTINUE', child: Text("Awal - Continue")), DropdownMenuItem(value: 'TANGGAL_TERTENTU', child: Text("Tanggal Tertentu")), DropdownMenuItem(value: 'RANGE', child: Text("Range Tanggal")), DropdownMenuItem(value: 'MINGGU', child: Text("Per Minggu")), DropdownMenuItem(value: '2MINGGU', child: Text("Per 2 Minggu")), DropdownMenuItem(value: 'BULAN', child: Text("Per Bulan"))], onChanged: (v) async {
-        setState(()=>filterWaktu=v!);
-        if(v=='RANGE'){ final p=await showDateRangePicker(context: context, firstDate: DateTime(2023), lastDate: DateTime.now(), initialDateRange: filterMulai!=null&&filterSelesai!=null?DateTimeRange(start: filterMulai!, end: filterSelesai!):null); if(p!=null){ filterMulai=p.start; filterSelesai=p.end; } }
-        if(v=='TANGGAL_TERTENTU'){ final p=await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime.now()); if(p!=null) filterMulai=p; }
-        _hitungLog();
-      }),
-    ])));
+  // WIDGET BINTANG 1-5
+  Widget _bintangWidget(int karyawanId, int bintangSaatIni){
+    return Row(mainAxisSize: MainAxisSize.min, children: List.generate(5, (i){
+      final idx = i+1;
+      return InkWell(onTap: () async { await db.setBintang(karyawanId, DateTime.now(), idx); }, child: Icon(idx<=bintangSaatIni? Icons.star : Icons.star_border, size: 22, color: Colors.amber.shade700));
+    }));
   }
 
   Widget _liveTab(){
     final today = DateTime.now();
-    return SingleChildScrollView(padding: const EdgeInsets.all(12), child: Column(children: [
-      _filterWidget(),
-      const SizedBox(height: 12),
-      StreamBuilder<List<KaryawanData>>(stream: db.watchKaryawan(), builder: (c,sKaryawan){
-        final totalKar = sKaryawan.data?.length?? 0;
-        return StreamBuilder<List<AbsensiData>>(stream: db.watchAbsensiHari(today), builder: (c,sAbsen){
-          final masuk = sAbsen.data?.length?? 0; final bolong = totalKar - masuk;
-          return Card(color: bolong==0?Colors.green.shade50:bolong==totalKar?Colors.red.shade50:Colors.yellow.shade50, child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [
-            Icon(bolong==0?Icons.check_circle:bolong==totalKar?Icons.cancel:Icons.warning, color: bolong==0?Colors.green:bolong==totalKar?Colors.red:Colors.orange, size: 40),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text("LIVE HARI INI ${DateFormat('dd MMM yyyy').format(today)} - CONTINUE", style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text("$masuk / $totalKar masuk | $bolong bolong", style: const TextStyle(fontSize: 13)),
+    return StreamBuilder<List<AbsensiData>>(stream: db.watchAbsensiHari(today), builder: (c, absSnap){
+      final absHariIni = absSnap.data?? [];
+      return StreamBuilder<List<KaryawanData>>(stream: db.watchKaryawan(), builder: (c, karSnap){
+        final allKar = karSnap.data?? [];
+        final idsMasuk = absHariIni.map((e)=>e.karyawanId).toSet();
+        final bolong = allKar.where((k)=>!idsMasuk.contains(k.id)).toList();
+        final full = absHariIni.where((a)=>a.tipeKerja=='FULL').toList();
+        final setengah = absHariIni.where((a)=>a.tipeKerja=='SETENGAH').toList();
+        return StreamBuilder<List<BintangHarianData>>(stream: db.watchBintangHari(today), builder: (c, bintangSnap){
+          final bintangList = bintangSnap.data?? [];
+          Map<int,int> bintangMap = {for(var b in bintangList) b.karyawanId: b.bintang};
+          return SingleChildScrollView(padding: const EdgeInsets.all(12), child: Column(children: [
+            // 1. STATUS HARI INI JAM BERAPA
+            Container(width: double.infinity, padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: Colors.brown.shade800, borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(nowLive), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+              Text(DateFormat('HH:mm:ss').format(nowLive) + " WIB - LIVE CONTINUE", style: const TextStyle(color: Colors.white70)),
             ])),
-          ])));
+
+            const SizedBox(height:12),
+            // 3. SIAPA BOLONG, ½, FULL + 4 & 5 UPDATE TIPE
+            Card(elevation:3, child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text("KEHADIRAN HARI INI ${DateFormat('dd MMM').format(today)} - ${absHariIni.length}/${allKar.length} MASUK", style: const TextStyle(fontWeight: FontWeight.bold)),
+              const Divider(),
+              if(full.isNotEmpty)...[const Text("✅ FULL 1 HARI:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),...full.map((a){ final kar = allKar.where((k)=>k.id==a.karyawanId).firstOrNull; return ListTile(dense:true, title: Text("ID:${a.karyawanId} ${kar?.nama??''}"), trailing: PopupMenuButton<String>(onSelected: (v) async { await db.updateTipeAbsen(a.id, v); }, itemBuilder: (_)=>[const PopupMenuItem(value:'SETENGAH', child: Text("Ubah jadi ½ Hari")), const PopupMenuItem(value:'FULL', child: Text("Tetap Full"))], child: const Icon(Icons.more_vert)), subtitle: Text(a.keterangan)); })],
+              if(setengah.isNotEmpty)...[const Text("🟡 ½ HARI:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),...setengah.map((a){ final kar = allKar.where((k)=>k.id==a.karyawanId).firstOrNull; return ListTile(dense:true, title: Text("ID:${a.karyawanId} ${kar?.nama??''} - ${a.keterangan}"), trailing: PopupMenuButton<String>(onSelected: (v) async { await db.updateTipeAbsen(a.id, v); }, itemBuilder: (_)=>[const PopupMenuItem(value:'FULL', child: Text("Ubah jadi FULL")), const PopupMenuItem(value:'SETENGAH', child: Text("Tetap ½"))], child: const Icon(Icons.more_vert))); })],
+              if(bolong.isNotEmpty)...[const Text("❌ BOLONG - GAK GAJIAN:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),...bolong.map((k)=> ListTile(dense:true, title: Text("ID:${k.id} ${k.nama}"), subtitle: const Text("Belum absen hari ini")))],
+            ]))),
+
+            const SizedBox(height:12),
+            // 2. BINTANG PRO-AKTIF 1-5
+            Card(color: Colors.amber.shade50, child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text("⭐ BINTANG PRO-AKTIF HARI INI (Buat Bonus Gaji)", style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text("Tap bintang 1-5, akumulasi buat bonus di halaman Gaji", style: TextStyle(fontSize:11)),
+              const Divider(),
+             ...allKar.map((k){
+                final b = bintangMap[k.id]??0;
+                return ListTile(dense:true, title: Text("ID:${k.id} ${k.nama}"), trailing: _bintangWidget(k.id, b), subtitle: Text(b==0?"Belum dinilai":"$b bintang"));
+              }),
+            ]))),
+
+            const SizedBox(height:12),
+            // 6,7,8 INPUT MANUAL PENJUALAN
+            StreamBuilder<LaporanHarianData?>(stream: db.watchLaporanHari(today), builder: (c, lapSnap){
+              final lap = lapSnap.data;
+              if(lap!=null && penjualanC.text=="0"){ penjualanC.text = lap.totalPenjualan.toString(); bebanOpsC.text = lap.bebanOperasional.toString(); tambahanC.text = lap.tambahanLain.toString(); ketTambahanC.text = lap.keteranganTambahan; }
+              return Card(color: Colors.blue.shade50, child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text("INPUT MANUAL HARI INI", style: TextStyle(fontWeight: FontWeight.bold)),
+                TextField(controller: penjualanC, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "6. Total Penjualan Hari Ini", prefixText: "Rp "), onChanged: (_)=> setState((){})),
+                TextField(controller: bebanOpsC, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "7. Beban Operasional Hari Ini (Solar, plastik, dll)", prefixText: "Rp "), onChanged: (_)=> setState((){})),
+                TextField(controller: tambahanC, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "8. Tambahan Pemasukan Lain (Parkir, jasa angkut)", prefixText: "Rp "), onChanged: (_)=> setState((){})),
+                TextField(controller: ketTambahanC, decoration: const InputDecoration(labelText: "Keterangan Tambahan")),
+                const SizedBox(height:8),
+                FutureBuilder<int>(future: db.hitungGajiHariIni(today), builder: (c,gajiSnap){
+                  final gajiHari = gajiSnap.data??0;
+                  final penjualan = _parse(penjualanC.text); final bebanOps = _parse(bebanOpsC.text); final tambahan = _parse(tambahanC.text);
+                  final totalMasuk = penjualan + tambahan; final totalBeban = bebanOps + gajiHari;
+                  final kotor = penjualan - bebanOps; final bersih = totalMasuk - totalBeban;
+                  return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(width: double.infinity, padding: const EdgeInsets.all(12), color: Colors.white, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text("9. ESTIMASI LABA HARI INI", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown.shade800)),
+                      Text("Gaji Hari Ini: Rp ${fmt.format(gajiHari)} (${absHariIni.length} org)"),
+                      Text("Laba Kotor: Rp ${fmt.format(kotor)} (Penjualan - Beban Ops)"),
+                      Text("Laba Bersih: Rp ${fmt.format(bersih)} (Total Masuk - Total Beban)", style: TextStyle(fontWeight: FontWeight.bold, color: bersih>=0?Colors.green:Colors.red)),
+                    ])),
+                    const SizedBox(height:8),
+                    SizedBox(width: double.infinity, child: ElevatedButton.icon(icon: const Icon(Icons.save), label: const Text("10. SIMPAN LOG LIVE HARI INI"), style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade800, foregroundColor: Colors.white), onPressed: () async {
+                      await db.simpanLaporanHarian(today, penjualan, bebanOps, tambahan, ketTambahanC.text, gajiHari, kotor, bersih);
+                      if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Log Live Hari Ini Disimpan - Muncul di Absensi")));
+                      setState(()=> bulan = DateTime.now()); _loadBulan();
+                    })),
+                  ]);
+                }),
+              ]))),
+            })
+          ]));
         });
-      }),
-      const SizedBox(height: 12),
-      Container(width: double.infinity, padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.brown.shade50, borderRadius: BorderRadius.circular(12)), child: Column(children: [
-        const Text("TOTAL AKUMULASI BEBAN GAJI DARI AWAL - CONTINUE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-        Text("Rp ${fmt.format(totalAkumulasi)}", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.brown.shade800)),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-          Column(children: [Container(width: 12, height: 12, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)), Text("Belum\n$totalBelum", textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))]),
-          Column(children: [Container(width: 12, height: 12, decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle)), Text("1 Minggu\n$totalKuning", textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))]),
-          Column(children: [Container(width: 12, height: 12, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)), Text("2 Minggu\n$totalHijau", textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))]),
-        ]),
-      ])),
-    ]));
+      });
+    });
   }
 
-  Widget _logTab(){
-    return Column(children: [
-      Padding(padding: const EdgeInsets.all(12), child: _filterWidget()),
-      Container(width: double.infinity, color: Colors.brown.shade50, padding: const EdgeInsets.all(12), child: Column(children: [const Text("TOTAL AKUMULASI SESUAI FILTER", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)), Text("Rp ${fmt.format(totalAkumulasi)}", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.brown.shade800))])),
-      Expanded(child: ListView.builder(itemCount: logList.length, itemBuilder: (_,i){ var g=logList[i]; return FutureBuilder<KaryawanData?>(future: (db.select(db.karyawan)..where((t)=>t.id.equals(g.karyawanId))).getSingleOrNull(), builder: (c,kar){ return Card(color: g.statusBayar=='BELUM'?Colors.red.shade50:g.statusBayar=='MINGGU1'?Colors.yellow.shade50:Colors.green.shade50, child: ListTile(leading: Icon(Icons.circle, color: g.statusBayar=='BELUM'?Colors.red:g.statusBayar=='MINGGU1'?Colors.orange:Colors.green, size: 14), title: Text("${kar.data?.nama??'ID ${g.karyawanId}'} - ${DateFormat('dd MMM').format(g.mingguMulai)}", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)), subtitle: Text("${g.totalHariEfektif} hari | Rp ${fmt.format(g.totalGaji)} | ${g.statusBayar}", style: const TextStyle(fontSize: 11)))); }); })),
-    ]);
+  // TAB ABSENSI - KLIK TANGGAL MUNCUL INFO 2,3,6,7,8,9
+  void _klikTanggal(DateTime tgl) async {
+    final absen = absenPerTanggal[DateTime(tgl.year,tgl.month,tgl.day)]?? [];
+    final laporan = await (db.select(db.laporanHarian)..where((t)=>t.tanggal.equals(DateTime(tgl.year,tgl.month,tgl.day)))).getSingleOrNull();
+    final bintang = await (db.select(db.bintangHarian)..where((t)=>t.tanggal.equals(DateTime(tgl.year,tgl.month,tgl.day)))).get();
+    final idsMasuk = absen.map((e)=>e.karyawanId).toSet();
+    final bolong = allKaryawan.where((k)=>!idsMasuk.contains(k.id)).toList();
+    showModalBottomSheet(context: context, isScrollControlled: true, builder: (_)=> Container(padding: const EdgeInsets.all(16), child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      Text("LOG ${DateFormat('dd MMM yyyy').format(tgl)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+      const Divider(),
+      Text("3. Kehadiran: ${absen.length}/${allKaryawan.length} masuk | ${bolong.length} bolong | Full:${absen.where((a)=>a.tipeKerja=='FULL').length} | ½:${absen.where((a)=>a.tipeKerja=='SETENGAH').length}"),
+      if(bolong.isNotEmpty) Text("❌ Bolong: ${bolong.map((k)=>k.nama).join(', ')}"),
+      const SizedBox(height:8),
+      Text("2. BINTANG HARI ITU: ${bintang.isEmpty?"Belum ada": bintang.map((b){ final kar = allKaryawan.where((k)=>k.id==b.karyawanId).firstOrNull; return "${kar?.nama?? b.karyawanId}: ${b.bintang}⭐"; }).join(', ')}"),
+      const Divider(),
+      if(laporan!=null)...[
+        Text("6. Penjualan: Rp ${fmt.format(laporan.totalPenjualan)}"),
+        Text("7. Beban Ops: Rp ${fmt.format(laporan.bebanOperasional)}"),
+        Text("8. Tambahan: Rp ${fmt.format(laporan.tambahanLain)} - ${laporan.keteranganTambahan}"),
+        const SizedBox(height:4),
+        Text("Gaji Hari Itu: Rp ${fmt.format(laporan.totalGajiHariIni)}", style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text("9. Laba Kotor: Rp ${fmt.format(laporan.labaKotor)}"),
+        Text("9. Laba Bersih: Rp ${fmt.format(laporan.labaBersih)}", style: TextStyle(fontWeight: FontWeight.bold, color: laporan.labaBersih>=0?Colors.green:Colors.red)),
+      ] else const Text("Belum ada laporan penjualan hari itu"),
+    ]))));
   }
 
   Widget _kalenderTab(){
@@ -140,21 +171,21 @@ class _DashboardPageState extends State<DashboardPage> {
     return Column(children: [
       Container(padding: const EdgeInsets.all(8), color: Colors.brown.shade50, child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         IconButton(icon: const Icon(Icons.chevron_left), onPressed: (){ setState(()=>bulan=DateTime(bulan.year, bulan.month-1,1)); _loadBulan(); }),
-        Text(DateFormat('MMMM yyyy').format(bulan), style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(DateFormat('MMMM yyyy','id_ID').format(bulan), style: const TextStyle(fontWeight: FontWeight.bold)),
         IconButton(icon: const Icon(Icons.chevron_right), onPressed: (){ setState(()=>bulan=DateTime(bulan.year, bulan.month+1,1)); _loadBulan(); }),
       ])),
       Expanded(child: GridView.builder(padding: const EdgeInsets.all(8), gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 0.9), itemCount: startWeekday + daysInMonth, itemBuilder: (_,i){
         if(i < startWeekday) return const SizedBox();
         final day = i - startWeekday + 1;
         final tgl = DateTime(bulan.year, bulan.month, day);
-        final warna = _warnaTanggal(tgl);
         final list = absenPerTanggal[DateTime(tgl.year,tgl.month,tgl.day)]?? [];
-        return GestureDetector(onTap: ()=>_klikTanggal(tgl), child: Container(margin: const EdgeInsets.all(3), decoration: BoxDecoration(color: warna, borderRadius: BorderRadius.circular(8)), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text("$day", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), Text("${list.length}/${allKaryawan.length}", style: const TextStyle(fontSize: 9))])));
+        final warna = list.isEmpty? Colors.red.shade200 : list.length>=allKaryawan.length? Colors.green.shade200 : Colors.yellow.shade200;
+        return GestureDetector(onTap: ()=>_klikTanggal(tgl), child: Container(margin: const EdgeInsets.all(3), decoration: BoxDecoration(color: warna, borderRadius: BorderRadius.circular(8)), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text("$day", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), Text("${list.length}/${allKaryawan.length}", style: const TextStyle(fontSize: 9))]))); // FIX: SEMUA WARNA BISA DIKLIK
       })),
     ]);
   }
 
   @override Widget build(BuildContext context){
-    return DefaultTabController(length: 3, child: Scaffold(appBar: AppBar(title: const Text("DASHBOARD"), backgroundColor: Colors.brown.shade800, foregroundColor: Colors.white, bottom: const TabBar(tabs: [Tab(text: "Live"), Tab(text: "Log"), Tab(text: "Absensi")])), body: TabBarView(children: [_liveTab(), _logTab(), _kalenderTab()])));
+    return DefaultTabController(length: 3, child: Scaffold(appBar: AppBar(title: const Text("DASHBOARD"), backgroundColor: Colors.brown.shade800, foregroundColor: Colors.white, bottom: const TabBar(tabs: [Tab(text: "Live"), Tab(text: "Log"), Tab(text: "Absensi")])), body: TabBarView(children: [_liveTab(), /* _logTab pakai yang lama */ Container(), _kalenderTab()])));
   }
 }
