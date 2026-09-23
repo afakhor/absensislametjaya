@@ -24,11 +24,9 @@ extension AbsenDao on AppDatabase {
     ));
   }
 
-  // watchKaryawan() DIHAPUS DARI SINI, PINDAH KE setowner_db.dart BIAR GAK DOUBLE
   Stream<List<AbsensiData>> watchAbsensiHari(DateTime tgl) {
     final start = DateTime(tgl.year, tgl.month, tgl.day);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59);
-    // FIX: PAKAI MAP BIAR BUILD RELEASE LOLOS, JANGAN PAKAI isBetweenValues
     return select(absensi).watch().map((list) => list.where((a) => a.jamMasuk.isAfter(start.subtract(const Duration(seconds:1))) && a.jamMasuk.isBefore(end.add(const Duration(seconds:1)))).toList());
   }
 
