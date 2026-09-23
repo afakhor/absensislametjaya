@@ -164,7 +164,7 @@ class _SettingOwnerPageState extends State<SettingOwnerPage> {
           SizedBox(width: double.infinity, height: 50, child: ElevatedButton.icon(icon: const Icon(Icons.person_add), label: Text(kategoriTerpilih == null? "Pilih Kategori Dulu" : "Simpan Karyawan ID Auto"), style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white), onPressed: kategoriTerpilih == null? null : _simpanKaryawan)),
 
           const Divider(height: 32),
-          const Text("3. Data Karyawan (ID Auto Increment)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text("3. Data Karyawan (ID Aut", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
           StreamBuilder<List<KaryawanData>>(
             stream: db.watchKaryawan(),
