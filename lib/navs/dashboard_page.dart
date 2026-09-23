@@ -5,7 +5,6 @@ import '../dbases/localdatabase.dart';
 import '../dbases/setowner_db.dart';
 import '../dbases/absen_db.dart';
 import '../dbases/gaji_db.dart';
-import '../dbases/live_db.dart';
 
 class DashboardPage extends StatefulWidget { const DashboardPage({super.key}); @override State<DashboardPage> createState() => _DashboardPageState(); }
 
@@ -129,7 +128,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     })),
                   ]);
                 }),
-              ]))),
+              ])))),
             })
           ]));
         });
