@@ -5,7 +5,7 @@ part 'localdatabase.g.dart';
 class KategoriKaryawan extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get namaKategori => text()();
-  IntColumn get tarifPerHari => integer()(); // FIX: DARI PER JAM JADI PER HARI
+  IntColumn get tarifPerHari => integer()();
 }
 
 class Karyawan extends Table {
@@ -23,8 +23,7 @@ class Absensi extends Table {
   RealColumn get totalJamKerja => real().withDefault(const Constant(8.0))();
   TextColumn get metode => text()();
   TextColumn get keterangan => text().withDefault(const Constant(''))();
-  TextColumn get tipeKerja => text().withDefault(const Constant('FULL'))(); // FULL / SETENGAH
-  // FIX: BONUS HARIAN DIHAPUS - PINDAH KE GAJI MINGGUAN
+  TextColumn get tipeKerja => text().withDefault(const Constant('FULL'))();
 }
 
 class GajiMingguan extends Table {
@@ -32,14 +31,14 @@ class GajiMingguan extends Table {
   IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id)')();
   DateTimeColumn get mingguMulai => dateTime()();
   DateTimeColumn get mingguSelesai => dateTime()();
-  RealColumn get totalHariEfektif => real().withDefault(const Constant(0))(); // 1 hari=1, ½ hari=0.5
+  RealColumn get totalHariEfektif => real().withDefault(const Constant(0))();
   IntColumn get totalHariMasuk => integer().withDefault(const Constant(0))();
   RealColumn get totalJam => real().withDefault(const Constant(0))();
   IntColumn get totalGajiPokok => integer().withDefault(const Constant(0))();
-  IntColumn get bonusMingguan => integer().withDefault(const Constant(0))(); // BONUS MINGGUAN DISINI
+  IntColumn get bonusMingguan => integer().withDefault(const Constant(0))();
   IntColumn get totalGaji => integer()();
-  IntColumn get totalBonus => integer().withDefault(const Constant(0))(); // legacy biar gak crash
-  TextColumn get statusBayar => text().withDefault(const Constant('BELUM'))(); // BELUM / MINGGU1 / MINGGU2
+  IntColumn get totalBonus => integer().withDefault(const Constant(0))();
+  TextColumn get statusBayar => text().withDefault(const Constant('BELUM'))();
   DateTimeColumn get tanggalBayar => dateTime().nullable()();
 }
 
@@ -78,10 +77,31 @@ class SimulasiLaba extends Table {
   TextColumn get catatan => text().nullable()();
 }
 
-@DriftDatabase(tables: [KategoriKaryawan, Karyawan, Absensi, GajiMingguan, Transaksi, AuditLog, SimulasiLaba])
+// --- TABEL BARU TARO DI ATAS ANNOTATION ---
+class BintangHarian extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id) ON DELETE CASCADE')();
+  DateTimeColumn get tanggal => dateTime()();
+  IntColumn get bintang => integer().withDefault(const Constant(0))();
+}
+
+class LaporanHarian extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  DateTimeColumn get tanggal => dateTime().unique()();
+  IntColumn get totalPenjualan => integer().withDefault(const Constant(0))();
+  IntColumn get bebanOperasional => integer().withDefault(const Constant(0))();
+  IntColumn get tambahanLain => integer().withDefault(const Constant(0))();
+  TextColumn get keteranganTambahan => text().withDefault(const Constant(''))();
+  IntColumn get totalGajiHariIni => integer().withDefault(const Constant(0))();
+  IntColumn get labaKotor => integer().withDefault(const Constant(0))();
+  IntColumn get labaBersih => integer().withDefault(const Constant(0))();
+}
+
+@DriftDatabase(tables: [KategoriKaryawan, Karyawan, Absensi, GajiMingguan, Transaksi, AuditLog, SimulasiLaba, BintangHarian, LaporanHarian])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'tb_slamet_jaya_v6_hari'));
-  @override int get schemaVersion => 4;
+  @override int get schemaVersion => 6; // NAIK JADI 6
+
   @override MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async => await m.createAll(),
     onUpgrade: (m, from, to) async {
@@ -98,6 +118,10 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(gajiMingguan, gajiMingguan.bonusMingguan);
         await m.addColumn(gajiMingguan, gajiMingguan.statusBayar);
         await m.addColumn(gajiMingguan, gajiMingguan.tanggalBayar);
+      }
+      if (from < 5) {
+        await m.createTable(bintangHarian);
+        await m.createTable(laporanHarian);
       }
     },
   );
