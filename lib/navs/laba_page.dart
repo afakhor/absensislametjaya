@@ -40,7 +40,11 @@ class _LabaPageState extends State<LabaPage> {
     allKaryawan = await db.select(db.karyawan).get();
     allKategori = await db.select(db.kategoriKaryawan).get();
     // default: Awal - Continue = dari data pertama sampai hari ini
-    final firstAbsen = await (db.select(db.absensi)..orderBy([(t)=>t.jamMasuk.asc)]..limit(1))).getSingleOrNull();
+  
+// GANTI JADI INI:
+final allAbs = await db.select(db.absensi).get();
+allAbs.sort((a,b)=> a.jamMasuk.compareTo(b.jamMasuk));
+final firstAbsen = allAbs.isNotEmpty? allAbs.first : null;
     periodeMulai = firstAbsen?.jamMasuk ?? DateTime.now().subtract(const Duration(days:30));
     periodeSelesai = DateTime.now();
     await _hitungAuto();
