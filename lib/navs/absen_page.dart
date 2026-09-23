@@ -20,8 +20,7 @@ class _AbsenPageState extends State<AbsenPage> {
   String _statusIjin = "Cek ijin...";
   DateTime _tglPilih = DateTime.now();
 
-  @override
-  void initState() {
+  @override void initState() {
     super.initState();
     _requestSemuaIjinAndroid();
   }
@@ -47,7 +46,6 @@ class _AbsenPageState extends State<AbsenPage> {
     } catch (_) { return false; }
   }
 
-  // FIX BARU: TANPA BONUS - BONUS PINDAH KE GAJI PAGE
   Future<void> _dialogTipeKerja(KaryawanData k, KategoriKaryawanData? kat, {required bool isFingerprint}) async {
     String tipe = 'FULL';
     final alasanC = TextEditingController();
@@ -55,7 +53,7 @@ class _AbsenPageState extends State<AbsenPage> {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
-          title: Text("Absen dadak - ID:${k.id}", style: const TextStyle(fontWeight: FontWeight.bold)),
+          title: Text("Absen - ID:${k.id} ${k.nama}", style: const TextStyle(fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -82,24 +80,42 @@ class _AbsenPageState extends State<AbsenPage> {
               label: const Text("SIMPAN ABSEN"),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
               onPressed: () async {
-                Navigator.pop(ctx);
-                double jam = tipe == 'FULL'? 8.0 : 4.0;
-                await db.into(db.absensi).insert(AbsensiCompanion.insert(
-                  karyawanId: k.id,
-                  jamMasuk: DateTime(_tglPilih.year, _tglPilih.month, _tglPilih.day, DateTime.now().hour, DateTime.now().minute),
-                  totalJamKerja: drift.Value(jam),
-                  metode: isFingerprint? 'FINGERPRINT' : 'MANUAL_OWNER_ID:${k.id}',
-                  keterangan: drift.Value(alasanC.text.isEmpty? (tipe == 'FULL'? "Kerja Full" : "Setengah Hari") : alasanC.text),
-                  tipeKerja: drift.Value(tipe),
-                ));
-                await db.catatAudit(
-                  aktor: isFingerprint? k.nama : 'OWNER',
-                  aksi: isFingerprint? 'ABSEN_FINGERPRINT' : 'MANUAL_OVERRIDE',
-                  target: "ID:${k.id} - ${k.nama}",
-                  detail: "Tgl ${_tglPilih.day}/${_tglPilih.month}/${_tglPilih.year} Tipe $tipe",
-                );
-                await db.prosesHitungGajiMingguan();
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("✅ ID:${k.id} ${k.nama} $tipe")));
+                // CEK BOCOR DI SINI - KUNCI UTAMA
+                final sudah = await db.sudahAbsenHariIni(k.id, _tglPilih);
+                if(sudah){
+                  if(ctx.mounted) Navigator.pop(ctx);
+                  if(!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(backgroundColor: Colors.red.shade700, content: Text('ID:${k.id} ${k.nama} sudah absen hari ini', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  );
+                  return;
+                }
+
+                try{
+                  Navigator.pop(ctx);
+                  double jam = tipe == 'FULL'? 8.0 : 4.0;
+                  await db.into(db.absensi).insert(AbsensiCompanion.insert(
+                    karyawanId: k.id,
+                    jamMasuk: DateTime(_tglPilih.year, _tglPilih.month, _tglPilih.day, DateTime.now().hour, DateTime.now().minute),
+                    totalJamKerja: drift.Value(jam),
+                    metode: isFingerprint? 'FINGERPRINT' : 'MANUAL_OWNER_ID:${k.id}',
+                    keterangan: drift.Value(alasanC.text.isEmpty? (tipe == 'FULL'? "Kerja Full" : "Setengah Hari") : alasanC.text),
+                    tipeKerja: drift.Value(tipe),
+                  ));
+                  await db.catatAudit(
+                    aktor: isFingerprint? k.nama : 'OWNER',
+                    aksi: isFingerprint? 'ABSEN_FINGERPRINT' : 'MANUAL_OVERRIDE',
+                    target: "ID:${k.id} - ${k.nama}",
+                    detail: "Tgl ${_tglPilih.day}/${_tglPilih.month}/${_tglPilih.year} Tipe $tipe",
+                  );
+                  await db.prosesHitungGajiMingguan();
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("✅ ID:${k.id} ${k.nama} $tipe")));
+                } catch(e){
+                  if(e.toString().contains('SUDAH_ABSEN')){
+                    if(!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text('ID:${k.id} ${k.nama} sudah absen hari ini')));
+                  }
+                }
               },
             ),
           ],
@@ -109,6 +125,13 @@ class _AbsenPageState extends State<AbsenPage> {
   }
 
   Future<void> _prosesFingerprint(KaryawanData k, KategoriKaryawanData? kat) async {
+    final sudah = await db.sudahAbsenHariIni(k.id, _tglPilih);
+    if(sudah){
+      if(!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.red.shade700, content: Text('ID:${k.id} ${k.nama} sudah absen hari ini', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))));
+      return;
+    }
+
     await _requestSemuaIjinAndroid();
     final support = await _cekFingerprintSupport();
     if (!support) {
@@ -128,7 +151,6 @@ class _AbsenPageState extends State<AbsenPage> {
 
   void _manualDenganIdKaryawan() {
     KaryawanData? karyawanTerpilih; KategoriKaryawanData? kategoriTerpilih;
-    final alasanC = TextEditingController();
     showDialog(context: context, builder: (_) => StatefulBuilder(builder: (context, setStateDialog) {
       return AlertDialog(
         title: const Text("Manual Owner - Pakai ID"),
@@ -151,14 +173,28 @@ class _AbsenPageState extends State<AbsenPage> {
             });
           }),
           const SizedBox(height: 12),
-          if (karyawanTerpilih!= null) Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text("ID: ${karyawanTerpilih!.id} - ${karyawanTerpilih!.nama}", style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text("Gaji: Rp ${kategoriTerpilih?.tarifPerHari}/hari"),
-          ])),
+          if (karyawanTerpilih!= null) FutureBuilder<bool>(future: db.sudahAbsenHariIni(karyawanTerpilih!.id, _tglPilih), builder: (c,snap){
+            final sudah = snap.data??false;
+            return Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: sudah? Colors.red.shade50 : Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: sudah? Colors.red.shade200 : Colors.green.shade200)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text("ID: ${karyawanTerpilih!.id} - ${karyawanTerpilih!.nama}", style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text("Gaji: Rp ${kategoriTerpilih?.tarifPerHari}/hari"),
+              if(sudah) Text("⚠️ ID:${karyawanTerpilih!.id} ${karyawanTerpilih!.nama} sudah absen hari ini", style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold, fontSize: 12)),
+            ]));
+          }),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
-          ElevatedButton(onPressed: karyawanTerpilih == null? null : () { Navigator.pop(context); _dialogTipeKerja(karyawanTerpilih!, kategoriTerpilih, isFingerprint: false); }, child: const Text("LANJUT")),
+          ElevatedButton(onPressed: karyawanTerpilih == null? null : () async {
+            final sudah = await db.sudahAbsenHariIni(karyawanTerpilih!.id, _tglPilih);
+            if(sudah){
+              if(!context.mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.red.shade700, content: Text('ID:${karyawanTerpilih!.id} ${karyawanTerpilih!.nama} sudah absen hari ini')));
+              return;
+            }
+            Navigator.pop(context); 
+            _dialogTipeKerja(karyawanTerpilih!, kategoriTerpilih, isFingerprint: false); 
+          }, child: const Text("LANJUT")),
         ],
       );
     }));
@@ -166,7 +202,7 @@ class _AbsenPageState extends State<AbsenPage> {
 
   @override Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Absen Wajib ${_tglPilih.day}/${_tglPilih.month}"), backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white,
+      appBar: AppBar(title: Text("Absen Wajib ${_tglPilih.day}/${_tglPilih.month} - $_statusIjin"), backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white,
         actions: [IconButton(icon: const Icon(Icons.calendar_today), onPressed: () async { final p = await showDatePicker(context: context, initialDate: _tglPilih, firstDate: DateTime(2023), lastDate: DateTime(2030)); if (p!= null) setState(() => _tglPilih = p); })]),
       floatingActionButton: FloatingActionButton.extended(icon: const Icon(Icons.admin_panel_settings), label: const Text("Input Manual pakai ID"), onPressed: _manualDenganIdKaryawan),
       body: StreamBuilder<List<KaryawanData>>(stream: db.watchKaryawan(), builder: (c, s) {
@@ -179,13 +215,18 @@ class _AbsenPageState extends State<AbsenPage> {
             return FutureBuilder<KategoriKaryawanData?>(future: (db.select(db.kategoriKaryawan)..where((t) => t.id.equals(k.kategoriId))).getSingleOrNull(), builder: (c, katSnap) {
               final kat = katSnap.data; final absenKaryawan = absenHariIni.where((a) => a.karyawanId == k.id).toList(); final sudahAbsen = absenKaryawan.isNotEmpty;
               return Card(color: sudahAbsen? Colors.green.shade50 : Colors.red.shade50, child: ListTile(
-                leading: k.fotoPath!= null? ClipOval(child: Image.file(File(k.fotoPath!), width: 50, height: 50, fit: BoxFit.cover)) : CircleAvatar(child: Text(k.id.toString())),
+                leading: k.fotoPath!= null? ClipOval(child: Image.file(File(k.fotoPath!), width: 50, height: 50, fit: BoxFit.cover)) : CircleAvatar(backgroundColor: sudahAbsen? Colors.green : Colors.red, child: Text(k.id.toString(), style: const TextStyle(color: Colors.white))),
                 title: Text("ID:${k.id} - ${k.nama}", style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text("Kategori: ${kat?.namaKategori} - Rp ${kat?.tarifPerHari}/hari"),
-                  Text(sudahAbsen? "✅ SUDAH ${absenKaryawan.first.tipeKerja}" : "❌ BELUM ABSEN - GAK GAJIAN", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: sudahAbsen? Colors.green.shade700 : Colors.red)),
+                  Text(sudahAbsen? "✅ SUDAH ${absenKaryawan.first.tipeKerja} - ${absenKaryawan.first.keterangan}" : "❌ BELUM ABSEN - GAK GAJIAN", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: sudahAbsen? Colors.green.shade700 : Colors.red)),
                 ]),
-                trailing: IconButton(icon: Icon(sudahAbsen? Icons.check_circle : Icons.fingerprint, color: Colors.green, size: 32), onPressed: sudahAbsen? null : () => _prosesFingerprint(k, kat)),
+                trailing: sudahAbsen
+                  ? const Icon(Icons.check_circle, color: Colors.green, size: 32)
+                  : IconButton(icon: const Icon(Icons.fingerprint, color: Colors.green, size: 32), onPressed: () => _prosesFingerprint(k, kat)),
+                onTap: sudahAbsen? (){
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ID:${k.id} ${k.nama} sudah absen hari ini')));
+                } : null,
               ));
             });
           });
