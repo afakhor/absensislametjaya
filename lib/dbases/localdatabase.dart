@@ -99,8 +99,8 @@ class LaporanHarian extends Table {
 
 @DriftDatabase(tables: [KategoriKaryawan, Karyawan, Absensi, GajiMingguan, Transaksi, AuditLog, SimulasiLaba, BintangHarian, LaporanHarian])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'tb_slamet_jaya_v6_hari'));
-  @override int get schemaVersion => 6; // NAIK JADI 6
+  AppDatabase() : super(driftDatabase(name: 'tb_slamet_jaya_v7_clean'));
+@override int get schemaVersion => 7;
 
   @override MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async => await m.createAll(),
