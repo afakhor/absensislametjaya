@@ -24,8 +24,7 @@ class _LabaPageState extends State<LabaPage> {
     final firstAbsen = allAbs.isNotEmpty? allAbs.first : null;
     periodeMulai = firstAbsen?.jamMasuk ?? DateTime.now().subtract(const Duration(days:30));
     periodeSelesai = DateTime.now();
-    await _hitungAuto();
-    setState((){});
+    await _hitungAuto(); setState((){});
   }
 
   Future<void> _pilihPeriode() async {
@@ -38,37 +37,29 @@ class _LabaPageState extends State<LabaPage> {
       ListTile(title: const Text('Tgl Tertentu Sampai Continue'), onTap: ()=> Navigator.pop(context, 'Tgl Tertentu Sampai Continue')),
     ]));
     if(pilih==null) return;
-
     if(pilih=='Akumulasi Awal - Continue'){
       final all = await db.select(db.absensi).get(); all.sort((a,b)=> a.jamMasuk.compareTo(b.jamMasuk));
       final first = all.isNotEmpty? all.first : null;
-      periodeMulai = first?.jamMasuk ?? DateTime.now().subtract(const Duration(days:30));
-      periodeSelesai = DateTime.now();
+      periodeMulai = first?.jamMasuk ?? DateTime.now().subtract(const Duration(days:30)); periodeSelesai = DateTime.now();
     } else if(pilih=='Per Minggu'){
-      final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime.now());
-      if(picked==null) return;
+      final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime.now()); if(picked==null) return;
       final minggu = await showDialog<int>(context: context, builder: (_)=> SimpleDialog(title: const Text('Pilih Minggu ke'), children: List.generate(4, (i)=> SimpleDialogOption(child: Text('Minggu ${i+1}'), onPressed: ()=> Navigator.pop(context, i+1)))));
       if(minggu==null) return;
-      final start = DateTime(picked.year, picked.month, (minggu-1)*7 + 1);
-      final end = DateTime(picked.year, picked.month, minggu*7).isAfter(DateTime(picked.year, picked.month+1,0))? DateTime(picked.year, picked.month+1,0) : DateTime(picked.year, picked.month, minggu*7);
-      periodeMulai = start; periodeSelesai = end;
+      periodeMulai = DateTime(picked.year, picked.month, (minggu-1)*7 + 1);
+      periodeSelesai = DateTime(picked.year, picked.month, minggu*7).isAfter(DateTime(picked.year, picked.month+1,0))? DateTime(picked.year, picked.month+1,0) : DateTime(picked.year, picked.month, minggu*7);
     } else if(pilih=='Per 2 Minggu'){
-      final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime.now());
-      if(picked==null) return;
+      final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime.now()); if(picked==null) return;
       final sesi = await showDialog<int>(context: context, builder: (_)=> SimpleDialog(title: const Text('Pilih'), children: [SimpleDialogOption(child: const Text('Minggu 1-2 (Tgl 1-15)'), onPressed: ()=> Navigator.pop(context, 1)), SimpleDialogOption(child: const Text('Minggu 3-4 (Tgl 16-Akhir)'), onPressed: ()=> Navigator.pop(context, 2))]));
       if(sesi==null) return;
       if(sesi==1){ periodeMulai = DateTime(picked.year, picked.month, 1); periodeSelesai = DateTime(picked.year, picked.month, 15); }
       else { periodeMulai = DateTime(picked.year, picked.month, 16); periodeSelesai = DateTime(picked.year, picked.month+1, 0); }
     } else if(pilih=='Per Bulan'){
-      final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime.now());
-      if(picked==null) return;
+      final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime.now()); if(picked==null) return;
       periodeMulai = DateTime(picked.year, picked.month, 1); periodeSelesai = DateTime(picked.year, picked.month+1, 0);
     } else if(pilih=='Per Range Tanggal'){
-      final range = await showDateRangePicker(context: context, firstDate: DateTime(2023), lastDate: DateTime.now());
-      if(range==null) return; periodeMulai = range.start; periodeSelesai = range.end;
+      final range = await showDateRangePicker(context: context, firstDate: DateTime(2023), lastDate: DateTime.now()); if(range==null) return; periodeMulai = range.start; periodeSelesai = range.end;
     } else if(pilih=='Tgl Tertentu Sampai Continue'){
-      final tgl = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime.now());
-      if(tgl==null) return; periodeMulai = tgl; periodeSelesai = DateTime.now();
+      final tgl = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime.now()); if(tgl==null) return; periodeMulai = tgl; periodeSelesai = DateTime.now();
     }
     setState(()=> filterAkumulasi = pilih); await _hitungAuto();
   }
@@ -81,19 +72,13 @@ class _LabaPageState extends State<LabaPage> {
     var lapFilter = allLaporan.where((l)=> l.tanggal.isAfter(start.subtract(const Duration(seconds:1))) && l.tanggal.isBefore(end.add(const Duration(seconds:1)))).toList();
     var allGaji = await db.select(db.gajiMingguan).get();
     if(filterKaryawanId!=null) allGaji = allGaji.where((g)=> g.karyawanId==filterKaryawanId).toList();
-    if(filterKategoriId!=null){
-      final ids = allKaryawan.where((k)=> k.kategoriId==filterKategoriId).map((k)=>k.id).toSet();
-      allGaji = allGaji.where((g)=> ids.contains(g.karyawanId)).toList();
-    }
+    if(filterKategoriId!=null){ final ids = allKaryawan.where((k)=> k.kategoriId==filterKategoriId).map((k)=>k.id).toSet(); allGaji = allGaji.where((g)=> ids.contains(g.karyawanId)).toList(); }
     allGaji = allGaji.where((g)=> g.mingguMulai.isAfter(start.subtract(const Duration(seconds:1))) && g.mingguMulai.isBefore(end.add(const Duration(seconds:1)))).toList();
     int omset = 0, bebanOps=0, tambahan=0, gajiHarian=0;
     for(var l in lapFilter){ omset += l.totalPenjualan; bebanOps += l.bebanOperasional; tambahan += l.tambahanLain; gajiHarian += l.totalGajiHariIni; }
     int bebanGaji = gajiHarian>0? gajiHarian : allGaji.fold<int>(0, (p,e)=> p+e.totalGaji);
     final pemasukan = omset + tambahan; final beban = bebanOps + bebanGaji; final kotor = omset - bebanOps; final bersih = pemasukan - beban;
-    if(mounted) setState((){
-      totalOmset = omset; totalBebanOps = bebanOps; totalTambahan = tambahan; totalBebanGaji = bebanGaji;
-      totalPemasukan = pemasukan; totalBeban = beban; labaKotor = kotor; labaBersih = bersih; totalAkumGaji = bebanGaji;
-    });
+    if(mounted) setState((){ totalOmset = omset; totalBebanOps = bebanOps; totalTambahan = tambahan; totalBebanGaji = bebanGaji; totalPemasukan = pemasukan; totalBeban = beban; labaKotor = kotor; labaBersih = bersih; totalAkumGaji = bebanGaji; });
   }
 
   Future<void> _cetakPdf() async {
@@ -124,15 +109,11 @@ class _LabaPageState extends State<LabaPage> {
         Card(child: ListTile(leading: const Icon(Icons.calendar_month), title: Text(filterAkumulasi), subtitle: Text(periodeMulai==null?'Belum pilih': '${DateFormat('dd MMM yyyy').format(periodeMulai!)} - ${DateFormat('dd MMM yyyy').format(periodeSelesai!)}'), onTap: _pilihPeriode, trailing: const Icon(Icons.edit))),
         const SizedBox(height:8),
         Card(color: Colors.grey.shade100, child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [
-          _rowAuto('Omset (auto dari Log Live)', totalOmset),
-          _rowAuto('Beban Operasional (auto)', totalBebanOps),
-          _rowAuto('Beban Gaji (auto dari Log/ Gaji)', totalBebanGaji),
+          _rowAuto('Omset (auto dari Log Live)', totalOmset), _rowAuto('Beban Operasional (auto)', totalBebanOps), _rowAuto('Beban Gaji (auto dari Log/ Gaji)', totalBebanGaji),
           const Divider(),
           Container(padding: const EdgeInsets.all(12), color: Colors.yellow.shade50, child: Column(children: [
-            _rowAuto('Total Pemasukan: Omset+Tambahan', totalPemasukan, bold: true),
-            _rowAuto('Total Beban: Ops+Gaji', totalBeban, bold: true),
-            _rowAuto('Laba Kotor: Omset - Ops', labaKotor, bold: true),
-            _rowAuto('Laba Bersih: Masuk - Beban', labaBersih, bold: true, color: labaBersih>=0? Colors.green : Colors.red),
+            _rowAuto('Total Pemasukan: Omset+Tambahan', totalPemasukan, bold: true), _rowAuto('Total Beban: Ops+Gaji', totalBeban, bold: true),
+            _rowAuto('Laba Kotor: Omset - Ops', labaKotor, bold: true), _rowAuto('Laba Bersih: Masuk - Beban', labaBersih, bold: true, color: labaBersih>=0? Colors.green : Colors.red),
           ])),
         ]))),
         const SizedBox(height:12),
