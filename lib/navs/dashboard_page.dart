@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide Column;
 import '../dbases/localdatabase.dart';
 import '../dbases/setowner_db.dart';
 import '../dbases/absen_db.dart';
