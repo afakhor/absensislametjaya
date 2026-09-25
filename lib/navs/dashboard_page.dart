@@ -281,7 +281,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               children: [
                                 const Text(
                                   "📝 LOG OMSET & OPERASIONAL HARIAN",
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueDark),
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900),
                                 ),
                                 const SizedBox(height: 8),
                                 TextField(
