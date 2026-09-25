@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+
 part 'localdatabase.g.dart';
 
 class KategoriKaryawan extends Table {
@@ -77,7 +78,6 @@ class SimulasiLaba extends Table {
   TextColumn get catatan => text().nullable()();
 }
 
-// --- TABEL BARU TARO DI ATAS ANNOTATION ---
 class BintangHarian extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id) ON DELETE CASCADE')();
@@ -97,32 +97,45 @@ class LaporanHarian extends Table {
   IntColumn get labaBersih => integer().withDefault(const Constant(0))();
 }
 
-@DriftDatabase(tables: [KategoriKaryawan, Karyawan, Absensi, GajiMingguan, Transaksi, AuditLog, SimulasiLaba, BintangHarian, LaporanHarian])
+@DriftDatabase(tables: [
+  KategoriKaryawan,
+  Karyawan,
+  Absensi,
+  GajiMingguan,
+  Transaksi,
+  AuditLog,
+  SimulasiLaba,
+  BintangHarian,
+  LaporanHarian
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'tb_slamet_jaya_v7_clean'));
-@override int get schemaVersion => 7;
 
-  @override MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) async => await m.createAll(),
-    onUpgrade: (m, from, to) async {
-      if (from < 2) await m.createTable(simulasiLaba);
-      if (from < 3) {
-        await m.addColumn(absensi, absensi.tipeKerja);
-        await m.addColumn(gajiMingguan, gajiMingguan.totalBonus);
-        await m.addColumn(gajiMingguan, gajiMingguan.totalHariMasuk);
-      }
-      if (from < 4) {
-        await m.addColumn(kategoriKaryawan, kategoriKaryawan.tarifPerHari);
-        await m.addColumn(gajiMingguan, gajiMingguan.totalHariEfektif);
-        await m.addColumn(gajiMingguan, gajiMingguan.totalGajiPokok);
-        await m.addColumn(gajiMingguan, gajiMingguan.bonusMingguan);
-        await m.addColumn(gajiMingguan, gajiMingguan.statusBayar);
-        await m.addColumn(gajiMingguan, gajiMingguan.tanggalBayar);
-      }
-      if (from < 5) {
-        await m.createTable(bintangHarian);
-        await m.createTable(laporanHarian);
-      }
-    },
-  );
+  @override
+  int get schemaVersion => 7;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) async => await m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) await m.createTable(simulasiLaba);
+          if (from < 3) {
+            await m.addColumn(absensi, absensi.tipeKerja);
+            await m.addColumn(gajiMingguan, gajiMingguan.totalBonus);
+            await m.addColumn(gajiMingguan, gajiMingguan.totalHariMasuk);
+          }
+          if (from < 4) {
+            await m.addColumn(kategoriKaryawan, kategoriKaryawan.tarifPerHari);
+            await m.addColumn(gajiMingguan, gajiMingguan.totalHariEfektif);
+            await m.addColumn(gajiMingguan, gajiMingguan.totalGajiPokok);
+            await m.addColumn(gajiMingguan, gajiMingguan.bonusMingguan);
+            await m.addColumn(gajiMingguan, gajiMingguan.statusBayar);
+            await m.addColumn(gajiMingguan, gajiMingguan.tanggalBayar);
+          }
+          if (from < 5) {
+            await m.createTable(bintangHarian);
+            await m.createTable(laporanHarian);
+          }
+        },
+      );
 }
