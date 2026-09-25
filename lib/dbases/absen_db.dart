@@ -39,13 +39,13 @@ extension AbsenDao on AppDatabase {
   /// Eksekusi simpan absensi baru (Fingerprint / Manual)
   Future<void> absenFingerprint(
     int karyawanId, {
-    DateTime? tanggal, // Tambahkan parameter tanggal opsional
+    DateTime? tanggal,
     String tipe = 'FULL',
     String alasan = '',
     String metode = 'FINGERPRINT',
   }) async {
     final tglTarget = tanggal ?? DateTime.now();
-    finalsekarang = DateTime(
+    final sekarang = DateTime( // <-- Diperbaiki: beri spasi antara 'final' dan 'sekarang'
       tglTarget.year,
       tglTarget.month,
       tglTarget.day,
