@@ -8,21 +8,25 @@ import 'navs/setting_owner.dart';
 
 void main() => runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: MainMenu()));
 
-class MainMenu extends StatefulWidget { const MainMenu({super.key}); @override State<MainMenu> createState() => _MainMenuState(); }
+class MainMenu extends StatefulWidget {
+  const MainMenu({super.key});
+  @override
+  State<MainMenu> createState() => _MainMenuState();
+}
 
 class _MainMenuState extends State<MainMenu> {
   int _idx = 0;
 
-  // JANGAN pakai const di sini - ini penyebab blank foto kamu
   final pages = [
-    AbsenPage(),
-    GajiPage(),
-    DashboardPage(),
-    LabaPage(),
-    SettingOwnerPage(),
+    const AbsenPage(),
+    const GajiPage(),
+    const DashboardPage(),
+    const LabaPage(),
+    const SettingOwnerPage(),
   ];
 
-  @override void initState() {
+  @override
+  void initState() {
     super.initState();
     _requestAllPermissionsAwal();
   }
@@ -48,7 +52,6 @@ class _MainMenuState extends State<MainMenu> {
         backgroundColor: Colors.brown.shade800,
         foregroundColor: Colors.white,
       ),
-      // PAKAI IndexedStack BIAR GAK RELOAD & GAK BLANK PAS PINDAH TAB
       body: IndexedStack(
         index: _idx,
         children: pages,
