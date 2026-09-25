@@ -4,7 +4,7 @@ import 'navs/absen_page.dart';
 import 'navs/gaji_page.dart';
 import 'navs/dashboard_page.dart';
 import 'navs/laba_page.dart';
-import 'settingowner.dart'; // Import file OwnerPage
+import 'navs/settingowner.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
