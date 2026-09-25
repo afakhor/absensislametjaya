@@ -157,8 +157,6 @@ class _OwnerPageState extends State<OwnerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('TB. SLAMET JAYA'),
         backgroundColor: Colors.brown.shade800,
         foregroundColor: Colors.white,
       ),
