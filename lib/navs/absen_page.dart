@@ -91,7 +91,7 @@ class _AbsenPageState extends State<AbsenPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        "Absen Manual (${DateFormat('dd/MM/yyyy', 'id_ID').format(_selectedDate)})",
+                        "Absen Manual (${DateFormat('dd/MM/yyyy').format(_selectedDate)})",
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       IconButton(
@@ -102,7 +102,7 @@ class _AbsenPageState extends State<AbsenPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Autocomplete Search Karyawan (ID + Nama + Kategori + Nominal + Foto)
+                  // Autocomplete Search Karyawan
                   StreamBuilder<List<KaryawanData>>(
                     stream: db.select(db.karyawan).watch(),
                     builder: (context, snapKaryawan) {
@@ -200,7 +200,7 @@ class _AbsenPageState extends State<AbsenPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Dropdown Tipe Kerja (Full 1 Hari / ½ Hari)
+                  // Dropdown Tipe Kerja
                   DropdownButtonFormField<String>(
                     value: tipeKerja,
                     decoration: const InputDecoration(
@@ -234,7 +234,7 @@ class _AbsenPageState extends State<AbsenPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Tombol Lanjut (Simpan)
+                  // Tombol Simpan
                   SizedBox(
                     width: double.infinity,
                     height: 44,
@@ -262,7 +262,6 @@ class _AbsenPageState extends State<AbsenPage> {
                           return;
                         }
 
-                        // Waktu jam masuk disesuaikan dengan tanggal terpilih
                         final jamMasukTarget = DateTime(
                           _selectedDate.year,
                           _selectedDate.month,
@@ -306,8 +305,12 @@ class _AbsenPageState extends State<AbsenPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Format tanggal untuk AppBar: misal "Senin, 25/09/2026"
-    final formattedDate = DateFormat('EEEE, dd/MM/yyyy', 'id_ID').format(_selectedDate);
+    String formattedDate;
+    try {
+      formattedDate = DateFormat('EEEE, dd/MM/yyyy', 'id_ID').format(_selectedDate);
+    } catch (_) {
+      formattedDate = DateFormat('dd/MM/yyyy').format(_selectedDate);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -318,13 +321,11 @@ class _AbsenPageState extends State<AbsenPage> {
           style: const TextStyle(fontSize: 15),
         ),
         actions: [
-          // Klik icon kalender untuk memilih tanggal
           IconButton(
             icon: const Icon(Icons.calendar_month),
             tooltip: 'Pilih Tanggal',
             onPressed: () => _selectDate(context),
           ),
-          // Klik icon + untuk Absen Manual oleh Owner
           IconButton(
             icon: const Icon(Icons.add_task),
             tooltip: 'Absen Manual Owner',
@@ -368,7 +369,8 @@ class _AbsenPageState extends State<AbsenPage> {
                     ),
                     onPressed: () async {
                       try {
-                        await db.absenFingerprint(kar.id);
+                        // Memasukkan tanggal terpilih (_selectedDate) ke fungsi absenFingerprint
+                        await db.absenFingerprint(kar.id, tanggal: _selectedDate);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text("Absen berhasil untuk ${kar.nama}")),
@@ -377,7 +379,7 @@ class _AbsenPageState extends State<AbsenPage> {
                       } catch (e) {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Sudah absen hari ini!")),
+                            const SnackBar(content: Text("Sudah absen pada tanggal ini!")),
                           );
                         }
                       }
