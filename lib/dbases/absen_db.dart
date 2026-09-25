@@ -39,11 +39,19 @@ extension AbsenDao on AppDatabase {
   /// Eksekusi simpan absensi baru (Fingerprint / Manual)
   Future<void> absenFingerprint(
     int karyawanId, {
+    DateTime? tanggal, // Tambahkan parameter tanggal opsional
     String tipe = 'FULL',
     String alasan = '',
     String metode = 'FINGERPRINT',
   }) async {
-    final sekarang = DateTime.now();
+    final tglTarget = tanggal ?? DateTime.now();
+    finalsekarang = DateTime(
+      tglTarget.year,
+      tglTarget.month,
+      tglTarget.day,
+      DateTime.now().hour,
+      DateTime.now().minute,
+    );
 
     if (await sudahAbsenHariIni(karyawanId, sekarang)) {
       throw Exception('SUDAH_ABSEN');
