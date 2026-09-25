@@ -109,7 +109,12 @@ class LaporanHarian extends Table {
   LaporanHarian
 ])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'tb_slamet_jaya_v7_clean'));
+  // --- KONEKSI SINGLETON (Pencegah Database Locked) ---
+  static final AppDatabase _instance = AppDatabase._internal();
+
+  factory AppDatabase() => _instance;
+
+  AppDatabase._internal() : super(driftDatabase(name: 'tb_slamet_jaya_v7_clean'));
 
   @override
   int get schemaVersion => 7;
