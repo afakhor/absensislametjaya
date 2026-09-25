@@ -1,54 +1,71 @@
-import 'package:flutter/material.dart';
-import '../dbases/localdatabase.dart';
-import '../dbases/absen_db.dart';
+import 'package:drift/drift.dart';
+import 'localdatabase.dart';
 
-class AbsenPage extends StatefulWidget {
-  const AbsenPage({super.key});
-  @override
-  State<AbsenPage> createState() => _AbsenPageState();
-}
+extension AbsenDao on AppDatabase {
+  /// Cek apakah karyawan sudah absen pada tanggal tertentu
+  Future<bool> sudahAbsenHariIni(int karyawanId, DateTime tgl) async {
+    final start = DateTime(tgl.year, tgl.month, tgl.day);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
+    
+    final cek = await (select(absensi)
+      ..where((t) => t.karyawanId.equals(karyawanId))
+      ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
+      ..where((t) => t.jamMasuk.isSmallerOrEqualValue(end))
+    ).getSingleOrNull();
 
-class _AbsenPageState extends State<AbsenPage> {
-  final db = AppDatabase();
+    return cek != null;
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: StreamBuilder<List<KaryawanData>>(
-        stream: db.select(db.karyawan).watch(),
-        builder: (c, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final list = snap.data ?? [];
-          if (list.isEmpty) return const Center(child: Text("Belum ada data karyawan"));
+  /// Watch/Stream absensi harian seluruh karyawan pada tanggal tertentu
+  Stream<List<AbsensiData>> watchAbsensiHari(DateTime tgl) {
+    final start = DateTime(tgl.year, tgl.month, tgl.day);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
 
-          return ListView.builder(
-            itemCount: list.length,
-            itemBuilder: (_, i) {
-              final kar = list[i];
-              return ListTile(
-                title: Text(kar.nama, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text("ID Karyawan: ${kar.id}"),
-                trailing: ElevatedButton.icon(
-                  icon: const Icon(Icons.fingerprint),
-                  label: const Text("Absen"),
-                  onPressed: () async {
-                    try {
-                      await db.absenFingerprint(kar.id);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Absen berhasil untuk ${kar.nama}")));
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sudah absen hari ini!")));
-                      }
-                    }
-                  },
-                ),
-              );
-            },
-          );
-        },
+    return (select(absensi)
+      ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
+      ..where((t) => t.jamMasuk.isSmallerOrEqualValue(end))
+      ..orderBy([(t) => OrderingTerm.desc(t.jamMasuk)])
+    ).watch();
+  }
+
+  /// Watch/Stream seluruh riwayat absensi milik 1 karyawan tertentu
+  Stream<List<AbsensiData>> watchAbsensiKaryawan(int karyawanId) {
+    return (select(absensi)
+      ..where((t) => t.karyawanId.equals(karyawanId))
+      ..orderBy([(t) => OrderingTerm.desc(t.jamMasuk)])
+    ).watch();
+  }
+
+  /// Eksekusi simpan absensi baru (Fingerprint / Manual)
+  Future<void> absenFingerprint(
+    int karyawanId, {
+    String tipe = 'FULL',
+    String alasan = '',
+    String metode = 'FINGERPRINT',
+  }) async {
+    final sekarang = DateTime.now();
+    
+    // Cek ganda sebelum insert
+    if (await sudahAbsenHariIni(karyawanId, sekarang)) {
+      throw Exception('SUDAH_ABSEN');
+    }
+
+    final jamKerja = (tipe == 'FULL') ? 8.0 : 4.0;
+
+    await into(absensi).insert(
+      AbsensiCompanion.insert(
+        karyawanId: karyawanId,
+        jamMasuk: sekarang,
+        totalJamKerja: Value(jamKerja),
+        metode: metode,
+        keterangan: Value(alasan.isEmpty ? 'Valid' : alasan),
+        tipeKerja: Value(tipe),
       ),
     );
+  }
+
+  /// Hapus data absensi jika ada kesalahan input
+  Future<void> hapusAbsen(int id) async {
+    await (delete(absensi)..where((t) => t.id.equals(id))).go();
   }
 }
