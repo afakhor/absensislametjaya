@@ -157,9 +157,6 @@ class _OwnerPageState extends State<OwnerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        backgroundColor: Colors.brown.shade800,
-        foregroundColor: Colors.white,
-      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -257,7 +254,7 @@ class _OwnerPageState extends State<OwnerPage> {
                       '${option.namaKategori} - Rp ${fmt.format(option.tarifPerHari)}',
                   optionsBuilder: (TextEditingValue textEditingValue) {
                     if (textEditingValue.text.isEmpty) {
-                      return categories; // Tampilkan seluruh daftar jika belum mengetik
+                      return categories;
                     }
                     return categories.where((KategoriKaryawanData option) {
                       return option.namaKategori
