@@ -5,9 +5,11 @@ import 'navs/gaji_page.dart';
 import 'navs/dashboard_page.dart';
 import 'navs/laba_page.dart';
 import 'navs/setting_owner.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('id_ID', null);
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: MainMenu(),
