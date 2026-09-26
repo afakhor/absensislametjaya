@@ -89,12 +89,19 @@ class LaporanHarian extends Table {
   IntColumn get id => integer().autoIncrement()();
   DateTimeColumn get tanggal => dateTime().unique()();
   IntColumn get totalPenjualan => integer().withDefault(const Constant(0))();
+  IntColumn get cash => integer().withDefault(const Constant(0))();
+  IntColumn get piutangBaru => integer().withDefault(const Constant(0))();
+  TextColumn get namaPelangganBon => text().withDefault(const Constant(''))();
   IntColumn get bebanOperasional => integer().withDefault(const Constant(0))();
+  IntColumn get kasbonKaryawan => integer().withDefault(const Constant(0))();
   IntColumn get tambahanLain => integer().withDefault(const Constant(0))();
   TextColumn get keteranganTambahan => text().withDefault(const Constant(''))();
+  IntColumn get saldoPiutangKemarin => integer().withDefault(const Constant(0))();
   IntColumn get totalGajiHariIni => integer().withDefault(const Constant(0))();
   IntColumn get labaKotor => integer().withDefault(const Constant(0))();
   IntColumn get labaBersih => integer().withDefault(const Constant(0))();
+  IntColumn get kasHariIni => integer().withDefault(const Constant(0))();
+  IntColumn get totalPiutangAkhir => integer().withDefault(const Constant(0))();
 }
 
 @DriftDatabase(tables: [
@@ -109,15 +116,14 @@ class LaporanHarian extends Table {
   LaporanHarian
 ])
 class AppDatabase extends _$AppDatabase {
-  // --- KONEKSI SINGLETON (Pencegah Database Locked) ---
   static final AppDatabase _instance = AppDatabase._internal();
 
   factory AppDatabase() => _instance;
 
-  AppDatabase._internal() : super(driftDatabase(name: 'tb_slamet_jaya_v7_clean'));
+  AppDatabase._internal() : super(driftDatabase(name: 'tb_slamet_jaya_v8_clean'));
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -140,6 +146,15 @@ class AppDatabase extends _$AppDatabase {
           if (from < 5) {
             await m.createTable(bintangHarian);
             await m.createTable(laporanHarian);
+          }
+          if (from < 8) {
+            await m.addColumn(laporanHarian, laporanHarian.cash);
+            await m.addColumn(laporanHarian, laporanHarian.piutangBaru);
+            await m.addColumn(laporanHarian, laporanHarian.namaPelangganBon);
+            await m.addColumn(laporanHarian, laporanHarian.kasbonKaryawan);
+            await m.addColumn(laporanHarian, laporanHarian.saldoPiutangKemarin);
+            await m.addColumn(laporanHarian, laporanHarian.kasHariIni);
+            await m.addColumn(laporanHarian, laporanHarian.totalPiutangAkhir);
           }
         },
       );
