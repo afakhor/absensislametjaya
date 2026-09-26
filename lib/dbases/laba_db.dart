@@ -1,13 +1,14 @@
 import 'package:drift/drift.dart';
 import 'localdatabase.dart';
+import 'gaji_db.dart';
 
 extension LabaDao on AppDatabase {
-  /// Menghitung akumulasi Laba Rugi Bulanan berdasarkan data LaporanHarian
+  /// Menghitung akumulasi Laba Rugi Bulanan berdasarkan data LaporanHarian.
+  /// Jika LaporanHarian belum terisi, sistem secara cerdas akan mengambil beban gaji dari rekap Gaji Mingguan/Absensi.
   Future<Map<String, int>> hitungLabaBulanan(DateTime bulan) async {
     final awal = DateTime(bulan.year, bulan.month, 1, 0, 0, 0);
     final akhir = DateTime(bulan.year, bulan.month + 1, 0, 23, 59, 59, 999);
 
-    // Ambil semua laporan harian dalam rentang bulan yang dipilih
     final laporanList = await (select(laporanHarian)
           ..where((t) => t.tanggal.isBiggerOrEqualValue(awal))
           ..where((t) => t.tanggal.isSmallerOrEqualValue(akhir)))
@@ -18,14 +19,19 @@ extension LabaDao on AppDatabase {
     int totalBebanOps = 0;
     int totalBebanGaji = 0;
 
-    for (var l in laporanList) {
-      totalOmset += l.totalPenjualan;
-      totalPemasukanLain += l.tambahanLain;
-      totalBebanOps += l.bebanOperasional;
-      totalBebanGaji += l.totalGajiHariIni;
+    if (laporanList.isNotEmpty) {
+      for (var l in laporanList) {
+        totalOmset += l.totalPenjualan;
+        totalPemasukanLain += l.tambahanLain;
+        totalBebanOps += l.bebanOperasional;
+        totalBebanGaji += l.totalGajiHariIni;
+      }
+    } else {
+      // Fallback: Jika LaporanHarian belum direkap, hitung beban gaji langsung dari rekapitulasi penggajian bulan tersebut
+      totalBebanGaji = await hitungBebanGajiPeriode(awal, akhir);
     }
 
-    // Kalkulasi Margin Laba Kotor 10%
+    // Margin Laba Kotor 10% dari Omset
     int labaKotor = (totalOmset * 0.10).round();
 
     // LABA BERSIH = Laba Kotor + Pemasukan Lain - Beban Gaji - Beban Operasional
