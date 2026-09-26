@@ -18,15 +18,15 @@ class _DashboardPageState extends State<DashboardPage> {
   DateTime nowLive = DateTime.now();
   Timer? timer;
 
-  // Controllers Input Harian
+  // Controllers Input Harian Widget Live (9 Inputan Utama)
   final omsetC = TextEditingController(text: "0");
   final cashC = TextEditingController(text: "0");
-  final namaPelangganC = TextEditingController();
+  final pendingC = TextEditingController(text: "0"); // Cash / Pending
   final pemLainC = TextEditingController(text: "0");
-  final ketPemLainC = TextEditingController();
+  final marginC = TextEditingController(text: "10"); // Default Margin 10%
   final bebanOpsC = TextEditingController(text: "0");
   final kasbonC = TextEditingController(text: "0");
-  final piutangKemarinC = TextEditingController(text: "0");
+  final bebanLainC = TextEditingController(text: "0");
 
   DateTime bulan = DateTime.now();
   DateTime logMulai = DateTime.now().subtract(const Duration(days: 7));
@@ -48,12 +48,12 @@ class _DashboardPageState extends State<DashboardPage> {
     timer?.cancel();
     omsetC.dispose();
     cashC.dispose();
-    namaPelangganC.dispose();
+    pendingC.dispose();
     pemLainC.dispose();
-    ketPemLainC.dispose();
+    marginC.dispose();
     bebanOpsC.dispose();
     kasbonC.dispose();
-    piutangKemarinC.dispose();
+    bebanLainC.dispose();
     super.dispose();
   }
 
@@ -237,12 +237,11 @@ class _DashboardPageState extends State<DashboardPage> {
                         if (lap != null && omsetC.text == "0" && lap.totalPenjualan > 0) {
                           omsetC.text = lap.totalPenjualan.toString();
                           cashC.text = lap.cash.toString();
-                          namaPelangganC.text = lap.namaPelangganBon;
+                          pendingC.text = lap.piutangBaru.toString();
                           pemLainC.text = lap.tambahanLain.toString();
-                          ketPemLainC.text = lap.keteranganTambahan;
                           bebanOpsC.text = lap.bebanOperasional.toString();
                           kasbonC.text = lap.kasbonKaryawan.toString();
-                          piutangKemarinC.text = lap.saldoPiutangKemarin.toString();
+                          bebanLainC.text = lap.saldoPiutangKemarin.toString(); // Dipetakan ke kolom bebanLain / piutang
                         }
 
                         return Card(
@@ -254,28 +253,22 @@ class _DashboardPageState extends State<DashboardPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text("FORMAT HARIAN TB. SLAMET JAYA (MARGIN 10%)",
+                                const Text("FORMAT HARIAN TB. SLAMET JAYA",
                                     style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
                                 const Divider(),
 
-                                const Text("A. Omset Hari Ini", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                _buildField("Omset Hari Ini (Total Jual)", omsetC),
-                                _buildField("Cash (Tunai Hari Ini)", cashC),
-                                _buildField("Nama Pelanggan Bon", namaPelangganC, isNum: false),
+                                const Text("1. Omset & Kas Masuk", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                _buildField("Omset Hari Ini", omsetC),
+                                _buildField("Cash Hari Ini", cashC),
+                                _buildField("Cash / Pending", pendingC),
+                                _buildField("Pemasukan Lain", pemLainC),
 
                                 const SizedBox(height: 10),
-                                const Text("B. Pemasukan Lainnya", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                _buildField("Pemasukan Lainnya (Rp)", pemLainC),
-                                _buildField("Keterangan", ketPemLainC, isNum: false),
-
-                                const SizedBox(height: 10),
-                                const Text("C. Beban", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                _buildField("Beban Operasional", bebanOpsC),
-                                _buildField("Kasbon / Piutang Karyawan", kasbonC),
-
-                                const SizedBox(height: 10),
-                                const Text("D. Saldo Piutang Kemarin", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                _buildField("Total Saldo Piutang Kemarin", piutangKemarinC),
+                                const Text("2. Parameter Margin & Beban", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                _buildField("Margin (%)", marginC),
+                                _buildField("Beban Ops", bebanOpsC),
+                                _buildField("Kasbon Karyawan", kasbonC),
+                                _buildField("Beban Lain", bebanLainC),
 
                                 const SizedBox(height: 12),
                                 FutureBuilder<int>(
@@ -284,18 +277,19 @@ class _DashboardPageState extends State<DashboardPage> {
                                     final bebanGaji = gajiSnap.data ?? 0;
                                     final omset = _parse(omsetC.text);
                                     final cash = _parse(cashC.text);
+                                    final pending = _parse(pendingC.text);
                                     final pemLain = _parse(pemLainC.text);
+                                    final marginPct = _parse(marginC.text) / 100.0;
                                     final bebanOps = _parse(bebanOpsC.text);
                                     final kasbon = _parse(kasbonC.text);
-                                    final piutangKemarin = _parse(piutangKemarinC.text);
+                                    final bebanLain = _parse(bebanLainC.text);
 
-                                    // Kalkulasi Sesuai Rumus
-                                    final labaKotor = (omset * 0.10).round();
-                                    final labaBersih = labaKotor + pemLain - bebanGaji - bebanOps;
-                                    final kasHariIni = cash + pemLain - bebanGaji - bebanOps - kasbon;
-                                    final piutangBaru = omset - cash;
-                                    final sisaPiutangLama = piutangKemarin - pemLain;
-                                    final totalPiutangAkhir = sisaPiutangLama + piutangBaru;
+                                    // Calculations / Algoritma Inti
+                                    final labaKotor = (omset * (marginPct > 0 ? marginPct : 0.10)).round();
+                                    final labaBersih = labaKotor + pemLain - bebanGaji - bebanOps - bebanLain;
+                                    final kasHariIni = cash + pemLain - bebanGaji - bebanOps - kasbon - bebanLain;
+                                    final totalBebanHarian = bebanGaji + bebanOps + bebanLain;
+                                    final rasioBebanOmset = omset > 0 ? ((totalBebanHarian / omset) * 100).toStringAsFixed(1) : "0.0";
 
                                     return Container(
                                       padding: const EdgeInsets.all(12),
@@ -306,15 +300,18 @@ class _DashboardPageState extends State<DashboardPage> {
                                       ),
                                       child: Column(
                                         children: [
-                                          _buildRow("E. Laba Kotor (10%)", "Rp ${fmt.format(labaKotor)}", Colors.purple.shade900),
-                                          _buildRow("F. LABA BERSIH", "Rp ${fmt.format(labaBersih)}",
+                                          _buildRow("Beban Gaji (Otomasis Absensi)", "Rp ${fmt.format(bebanGaji)}", Colors.brown.shade800),
+                                          const Divider(),
+                                          _buildRow("Laba Kotor (${(marginPct * 100).toInt()}%)", "Rp ${fmt.format(labaKotor)}", Colors.purple.shade900),
+                                          _buildRow("LABA BERSIH", "Rp ${fmt.format(labaBersih)}",
                                               labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700, isBold: true),
                                           const Divider(),
-                                          _buildRow("G. KAS HARI INI (Di Laci)", "Rp ${fmt.format(kasHariIni)}", Colors.blue.shade900, isBold: true),
+                                          _buildRow("KAS HARI INI (Di Laci)", "Rp ${fmt.format(kasHariIni)}", Colors.blue.shade900, isBold: true),
                                           const Divider(),
-                                          _buildRow("Piutang Baru Hari Ini", "Rp ${fmt.format(piutangBaru)}", Colors.orange.shade800),
-                                          _buildRow("Sisa Piutang Lama", "Rp ${fmt.format(sisaPiutangLama)}", Colors.orange.shade800),
-                                          _buildRow("H. TOTAL PIUTANG AKHIR", "Rp ${fmt.format(totalPiutangAkhir)}", Colors.red.shade900, isBold: true),
+                                          // Otomatisasi Analisis Live
+                                          _buildRow("Total Beban Harian", "Rp ${fmt.format(totalBebanHarian)}", Colors.red.shade800),
+                                          _buildRow("Rasio Beban / Omset", "$rasioBebanOmset %", Colors.black87),
+                                          _buildRow("Pending / Piutang Baru", "Rp ${fmt.format(pending)}", Colors.orange.shade800),
                                           const SizedBox(height: 12),
                                           SizedBox(
                                             width: double.infinity,
@@ -329,18 +326,18 @@ class _DashboardPageState extends State<DashboardPage> {
                                                   tgl: today,
                                                   omset: omset,
                                                   cash: cash,
-                                                  piutangBaru: piutangBaru,
-                                                  namaPelanggan: namaPelangganC.text,
+                                                  piutangBaru: pending,
+                                                  namaPelanggan: "",
                                                   pemLain: pemLain,
-                                                  ketPemLain: ketPemLainC.text,
+                                                  ketPemLain: "",
                                                   bebanGaji: bebanGaji,
                                                   bebanOps: bebanOps,
                                                   kasbon: kasbon,
-                                                  piutangKemarin: piutangKemarin,
+                                                  piutangKemarin: bebanLain,
                                                   labaKotor: labaKotor,
                                                   labaBersih: labaBersih,
                                                   kasHariIni: kasHariIni,
-                                                  totalPiutangAkhir: totalPiutangAkhir,
+                                                  totalPiutangAkhir: pending + bebanLain,
                                                 );
                                                 _loadBulan();
                                                 if (context.mounted) {
@@ -448,45 +445,74 @@ class _DashboardPageState extends State<DashboardPage> {
                   .where((l) => l.tanggal.isAfter(start.subtract(const Duration(seconds: 1))) && l.tanggal.isBefore(end.add(const Duration(seconds: 1))))
                   .toList();
 
-              return ListView.builder(
-                padding: const EdgeInsets.all(8),
-                itemCount: filtered.length,
-                itemBuilder: (_, i) {
-                  final l = filtered[i];
-                  return Card(
-                    elevation: 2,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              // Akumulasi Mingguan / Periode Terpilih
+              int accOmset = 0;
+              int accLabaBersih = 0;
+              int accKasbon = 0;
+              for (var item in filtered) {
+                accOmset += item.totalPenjualan;
+                accLabaBersih += item.labaBersih;
+                accKasbon += item.kasbonKaryawan;
+              }
+
+              return Column(
+                children: [
+                  if (filtered.isNotEmpty)
+                    Container(
+                      color: Colors.amber.shade100,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(DateFormat('EEEE, dd MMM yyyy', 'id_ID').format(l.tanggal),
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              Text("Laba Bersih: Rp ${fmt.format(l.labaBersih)}",
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: l.labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700)),
-                            ],
-                          ),
-                          const Divider(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text("Penjualan: Rp ${fmt.format(l.totalPenjualan)}", style: const TextStyle(fontSize: 11)),
-                              Text("Beban Ops: Rp ${fmt.format(l.bebanOperasional)} | Gaji: Rp ${fmt.format(l.totalGajiHariIni)}",
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
-                            ],
-                          ),
+                          Text("Akumulasi Log (${filtered.length} Hari)", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          Text("Omset: Rp ${fmt.format(accOmset)} | Laba: Rp ${fmt.format(accLabaBersih)} | Kasbon: Rp ${fmt.format(accKasbon)}",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.brown.shade900)),
                         ],
                       ),
                     ),
-                  );
-                },
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final l = filtered[i];
+                        return Card(
+                          elevation: 2,
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(DateFormat('EEEE, dd MMM yyyy', 'id_ID').format(l.tanggal),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    Text("Laba Bersih: Rp ${fmt.format(l.labaBersih)}",
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            color: l.labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700)),
+                                  ],
+                                ),
+                                const Divider(height: 10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text("Penjualan: Rp ${fmt.format(l.totalPenjualan)}", style: const TextStyle(fontSize: 11)),
+                                    Text("Ops: Rp ${fmt.format(l.bebanOperasional)} | Gaji: Rp ${fmt.format(l.totalGajiHariIni)}",
+                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               );
             },
           ),
@@ -528,8 +554,13 @@ class _DashboardPageState extends State<DashboardPage> {
                     _buildRow("Penjualan", "Rp ${fmt.format(laporan.totalPenjualan)}", Colors.black),
                     _buildRow("Beban Ops", "Rp ${fmt.format(laporan.bebanOperasional)}", Colors.black),
                     _buildRow("Beban Gaji Hari Ini", "Rp ${fmt.format(laporan.totalGajiHariIni)}", Colors.black),
+                    _buildRow("Kasbon Karyawan", "Rp ${fmt.format(laporan.kasbonKaryawan)}", Colors.black),
                     const Divider(),
                     _buildRow("Laba Bersih", "Rp ${fmt.format(laporan.labaBersih)}", laporan.labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700, isBold: true),
+                    if (absen.isNotEmpty && laporan.totalPenjualan > 0) ...[
+                      const Divider(),
+                      _buildRow("Produktivitas / Karyawan", "Rp ${fmt.format((laporan.totalPenjualan / absen.length).round())}", Colors.blue.shade900, isBold: true),
+                    ]
                   ],
                 ),
               ),
@@ -587,7 +618,6 @@ class _DashboardPageState extends State<DashboardPage> {
               if (list.isNotEmpty) {
                 warna = (allKaryawan.isNotEmpty && list.length >= allKaryawan.length) ? Colors.green.shade200 : Colors.yellow.shade200;
               }
-
               return GestureDetector(
                 onTap: () => _klikTanggal(tgl),
                 child: Container(
