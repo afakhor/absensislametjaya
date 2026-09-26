@@ -15,40 +15,46 @@ class _GajiPageState extends State<GajiPage> {
   final db = AppDatabase();
   final fmt = NumberFormat("#,###", "id_ID");
 
-  // State Filter Bulan (Header Ungu)
   DateTime _bulan = DateTime.now();
-
-  // State Filter & Indexing Kombinasi
-  List<int> _selectedKaryawanIds = []; // Multi-select karyawan
-  List<String> _selectedStatusColors = []; // Multi-select warna: 'LUNAS', 'MINGGU1', 'BELUM'
-  DateTimeRange? _selectedDateRange; // Filter rentang periode seminggu
-  bool _sortByStarsDesc = false; // Indexing Bintang Banyak ke Sedikit
+  List<int> _selectedKaryawanIds = [];
+  List<String> _selectedStatusColors = [];
+  DateTimeRange? _selectedDateRange;
+  bool _sortByStarsDesc = false;
+  bool _isLoadingProses = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      db.prosesHitungGajiMingguan().then((_) {
-        if (mounted) setState(() {});
-      });
-    });
+    _refreshGajiData();
   }
 
-  // Menentukan Warna Badge Status Pembayaran (Hijau - Kuning - Merah)
+  Future<void> _refreshGajiData() async {
+    if (_isLoadingProses) return;
+    setState(() => _isLoadingProses = true);
+    try {
+      await db.prosesHitungGajiMingguan();
+    } catch (e) {
+      debugPrint("Error kalkulasi gaji: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingProses = false);
+      }
+    }
+  }
+
   Color _getWarnaStatus(String status) {
     switch (status) {
       case 'MINGGU2':
       case 'LUNAS':
-        return Colors.green; // 🟢 Hijau (Lunas)
+        return Colors.green;
       case 'MINGGU1':
-        return Colors.orange; // 🟡 Kuning (1 Minggu / Partial)
+        return Colors.orange;
       case 'BELUM':
       default:
-        return Colors.red; // 🔴 Merah (Belum)
+        return Colors.red;
     }
   }
 
-  // Label Deskripsi Status
   String _getLabelStatus(String status) {
     switch (status) {
       case 'MINGGU2':
@@ -62,7 +68,6 @@ class _GajiPageState extends State<GajiPage> {
     }
   }
 
-  // Dialog Edit/Input Bonus Mingguan (Warna Biru)
   void _dialogBonus(BuildContext context, GajiMingguanData g) async {
     final rataBintang = await db.getRataBintangMingguan(
       g.karyawanId,
@@ -78,7 +83,7 @@ class _GajiPageState extends State<GajiPage> {
         return AlertDialog(
           title: const Text("Input Bonus Mingguan"),
           content: Column(
-            mainAxisSize: MainAxisSize.min, // FIX 1: Diganti dari FullAxisSize.min
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("Akumulasi Rating Bintang: ${rataBintang.toStringAsFixed(1)} ★"),
@@ -117,7 +122,7 @@ class _GajiPageState extends State<GajiPage> {
               onPressed: () async {
                 final bonus = int.tryParse(bonusController.text) ?? 0;
                 await db.inputBonusMingguan(g.id, bonus);
-                if (mounted) setState(() {});
+                await _refreshGajiData();
                 if (ctx.mounted) Navigator.pop(ctx);
               },
               child: const Text("Simpan"),
@@ -128,7 +133,6 @@ class _GajiPageState extends State<GajiPage> {
     );
   }
 
-  // Bottom Sheet untuk Filter Multi-Indexing & Periode Seminggu dalam 1 Kali Pencarian
   void _showFilterModal(List<KaryawanData> listKar) {
     showModalBottomSheet(
       context: context,
@@ -163,8 +167,6 @@ class _GajiPageState extends State<GajiPage> {
                       ],
                     ),
                     const Divider(),
-
-                    // 1. Filter Periode Seminggu
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text("Filter Periode Seminggu", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
@@ -185,8 +187,6 @@ class _GajiPageState extends State<GajiPage> {
                       },
                     ),
                     const SizedBox(height: 8),
-
-                    // 2. Indexing Warna Status (Merah, Kuning, Hijau)
                     const Text("Filter Warna Status:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Wrap(
@@ -231,8 +231,6 @@ class _GajiPageState extends State<GajiPage> {
                       ],
                     ),
                     const SizedBox(height: 12),
-
-                    // 3. Indexing Karyawan (1 atau Lebih)
                     const Text("Filter Karyawan (Pilih 1 atau Lebih):", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Wrap(
@@ -252,11 +250,9 @@ class _GajiPageState extends State<GajiPage> {
                       }).toList(),
                     ),
                     const SizedBox(height: 12),
-
-                    // 4. Indexing Bintang Paling Banyak ke Sedikit
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text("Urutkan Bintang Terbanyak -> Tersedikit", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      title: const Text("Urutkan Total Gaji Terbanyak", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                       value: _sortByStarsDesc,
                       onChanged: (val) {
                         setModalState(() => _sortByStarsDesc = val);
@@ -264,7 +260,6 @@ class _GajiPageState extends State<GajiPage> {
                       },
                     ),
                     const SizedBox(height: 16),
-
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -291,6 +286,11 @@ class _GajiPageState extends State<GajiPage> {
         backgroundColor: Colors.brown.shade800,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.sync),
+            onPressed: _refreshGajiData,
+            tooltip: "Hitung Ulang Gaji",
+          ),
           StreamBuilder<List<KaryawanData>>(
             stream: db.select(db.karyawan).watch(),
             builder: (context, snapshot) {
@@ -304,69 +304,62 @@ class _GajiPageState extends State<GajiPage> {
       ),
       body: Column(
         children: [
-          // Header Informasi Ungu: Total Gajian Bulan Ini vs Kontinu Keseluruhan
+          if (_isLoadingProses)
+            const LinearProgressIndicator(backgroundColor: Colors.purple, color: Colors.amber),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.brown.shade50,
-            child: Column(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Total Gajian Keseluruhan (Kontinu dari Awal s/d Saat Ini)
-                    FutureBuilder<int>(
-                      future: db.getTotalGajianSemua(),
-                      builder: (c, s) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Total Kontinu (Awal - Saat ini):",
-                            style: TextStyle(fontSize: 10, color: Colors.purple, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            "Rp ${fmt.format(s.data ?? 0)}",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                              color: Colors.purple,
-                            ),
-                          ),
-                        ],
+                FutureBuilder<int>(
+                  future: db.getTotalGajianSemua(),
+                  builder: (c, s) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Total Kontinu (Akumulasi):",
+                        style: TextStyle(fontSize: 10, color: Colors.purple, fontWeight: FontWeight.bold),
                       ),
+                      Text(
+                        "Rp ${fmt.format(s.data ?? 0)}",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: Colors.purple,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left, size: 20),
+                      onPressed: () {
+                        setState(() {
+                          _bulan = DateTime(_bulan.year, _bulan.month - 1, 1);
+                        });
+                      },
                     ),
-                    // Pemilih Bulan
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.chevron_left, size: 20),
-                          onPressed: () {
-                            setState(() {
-                              _bulan = DateTime(_bulan.year, _bulan.month - 1, 1);
-                            });
-                          },
-                        ),
-                        Text(
-                          DateFormat('MMM yyyy', 'id_ID').format(_bulan),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.chevron_right, size: 20),
-                          onPressed: () {
-                            setState(() {
-                              _bulan = DateTime(_bulan.year, _bulan.month + 1, 1);
-                            });
-                          },
-                        ),
-                      ],
+                    Text(
+                      DateFormat('MMM yyyy', 'id_ID').format(_bulan),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right, size: 20),
+                      onPressed: () {
+                        setState(() {
+                          _bulan = DateTime(_bulan.year, _bulan.month + 1, 1);
+                        });
+                      },
                     ),
                   ],
                 ),
               ],
             ),
           ),
-
-          // Stream List Data Gaji Mingguan Karyawan
           Expanded(
             child: StreamBuilder<List<GajiMingguanData>>(
               stream: (db.select(db.gajiMingguan)
@@ -378,29 +371,23 @@ class _GajiPageState extends State<GajiPage> {
 
                 final allData = snap.data ?? [];
 
-                // BARIS FITUR FILTER & INDEXING KOMBINASI
-                // Menentukan penyaringan data gaji berdasarkan input pengguna
                 var filtered = allData.where((g) {
-                  /* BARIS DITENTUKAN: PENYARINGAN FILTER PERIODE BULANAN/MINGGUAN */
-                  // Jika filter date range diaktifkan, gunakan filter seminggu tersebut
                   if (_selectedDateRange != null) {
                     if (g.mingguMulai.isBefore(_selectedDateRange!.start) ||
                         g.mingguSelesai.isAfter(_selectedDateRange!.end)) {
                       return false;
                     }
                   } else {
-                    // Default filter berdasarkan bulan header
-                    if (g.mingguMulai.month != _bulan.month || g.mingguMulai.year != _bulan.year) {
-                      return false;
-                    }
+                    // Cek jika transaksi berada di bulan/tahun yang terpilih
+                    bool matchMonth = (g.mingguMulai.month == _bulan.month && g.mingguMulai.year == _bulan.year) ||
+                        (g.mingguSelesai.month == _bulan.month && g.mingguSelesai.year == _bulan.year);
+                    if (!matchMonth) return false;
                   }
 
-                  // Filter Indexing Karyawan (1 atau Lebih)
                   if (_selectedKaryawanIds.isNotEmpty && !_selectedKaryawanIds.contains(g.karyawanId)) {
                     return false;
                   }
 
-                  // Filter Indexing Status Warna (Merah / Kuning / Hijau)
                   if (_selectedStatusColors.isNotEmpty && !_selectedStatusColors.contains(g.statusBayar)) {
                     return false;
                   }
@@ -408,14 +395,27 @@ class _GajiPageState extends State<GajiPage> {
                   return true;
                 }).toList();
 
-                // Hitung Total Gajian Bulan Ini (Sesuai Filter Bulan)
                 final totalGajiBulanIni = filtered.fold<int>(0, (sum, item) => sum + item.totalGaji);
 
                 if (filtered.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      "Belum ada data gaji pada kriteria filter ini.\nLakukan absensi di Tab Live dahulu.",
-                      textAlign: TextAlign.center,
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Belum ada data gaji pada kriteria filter (${DateFormat('MMM yyyy', 'id_ID').format(_bulan)}).",
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: _refreshGajiData,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text("Proses & Sinkronkan Gaji"),
+                        )
+                      ],
                     ),
                   );
                 }
@@ -425,16 +425,12 @@ class _GajiPageState extends State<GajiPage> {
                   builder: (context, karSnap) {
                     final listKar = karSnap.data ?? [];
 
-                    // Sorting Bintang jika diaktifkan
                     if (_sortByStarsDesc) {
-                      filtered.sort((a, b) {
-                        return b.totalGaji.compareTo(a.totalGaji);
-                      });
+                      filtered.sort((a, b) => b.totalGaji.compareTo(a.totalGaji));
                     }
 
                     return Column(
                       children: [
-                        // Sub-header Info Total Gajian Bulan Ini (Ungu)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                           color: Colors.purple.shade50,
@@ -442,7 +438,7 @@ class _GajiPageState extends State<GajiPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                "Total Gajian Bulan ${DateFormat('MMMM yyyy', 'id_ID').format(_bulan)}:",
+                                "Total Rekap Periode Ini:",
                                 style: TextStyle(fontSize: 12, color: Colors.purple.shade900, fontWeight: FontWeight.w600),
                               ),
                               Text(
@@ -478,7 +474,7 @@ class _GajiPageState extends State<GajiPage> {
                                     style: const TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                   subtitle: Text(
-                                    "Periode: ${DateFormat('dd/MM').format(g.mingguMulai)} - ${DateFormat('dd/MM/yy').format(g.mingguSelesai)} | ${g.totalHariEfektif} Hari Efektif",
+                                    "Periode: ${DateFormat('dd/MM').format(g.mingguMulai)} - ${DateFormat('dd/MM/yy').format(g.mingguSelesai)} | ${g.totalHariEfektif} Hari",
                                     style: const TextStyle(fontSize: 11),
                                   ),
                                   trailing: Column(
@@ -525,12 +521,10 @@ class _GajiPageState extends State<GajiPage> {
                                             ],
                                           ),
                                           const SizedBox(height: 4),
-
-                                          // WARNA BIRU: BONUS MINGGUAN (Dapat di-input tiap minggu)
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              const Text("Bonus Mingguan (Input):",
+                                              const Text("Bonus Mingguan:",
                                                   style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w600)),
                                               InkWell(
                                                 onTap: () => _dialogBonus(context, g),
@@ -539,7 +533,6 @@ class _GajiPageState extends State<GajiPage> {
                                                   style: const TextStyle(
                                                     color: Colors.blue,
                                                     fontWeight: FontWeight.bold,
-                                                    decoration: TextDecoration.none, // FIX 2: Diganti dari TextUnderline.none
                                                   ),
                                                 ),
                                               ),
@@ -560,7 +553,6 @@ class _GajiPageState extends State<GajiPage> {
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              // WARNA KUNING/PURPLE: REKOMENDASI/AKUMULASI STAR TIAN HARI
                                               FutureBuilder<double>(
                                                 future: db.getRataBintangMingguan(g.karyawanId, g.mingguMulai, g.mingguSelesai),
                                                 builder: (context, starSnap) {
@@ -568,7 +560,7 @@ class _GajiPageState extends State<GajiPage> {
                                                   return OutlinedButton.icon(
                                                     icon: const Icon(Icons.star, size: 16, color: Colors.orange),
                                                     label: Text(
-                                                      "Akumulasi Star: ${starVal.toStringAsFixed(1)} ★",
+                                                      "Star: ${starVal.toStringAsFixed(1)} ★",
                                                       style: const TextStyle(fontSize: 11, color: Colors.orange),
                                                     ),
                                                     onPressed: () => _dialogBonus(context, g),
@@ -578,7 +570,7 @@ class _GajiPageState extends State<GajiPage> {
                                               PopupMenuButton<String>(
                                                 onSelected: (v) async {
                                                   await db.tandaiBayar(g.id, v);
-                                                  if (mounted) setState(() {});
+                                                  setState(() {});
                                                 },
                                                 itemBuilder: (_) => [
                                                   const PopupMenuItem(
