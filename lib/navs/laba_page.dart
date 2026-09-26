@@ -71,7 +71,7 @@ class _LabaPageState extends State<LabaPage> {
             ),
           ),
 
-          // Tampilan Laporan
+          // Tampilan Laporan Bulanan
           Expanded(
             child: FutureBuilder<Map<String, int>>(
               future: _labaFuture,
@@ -93,8 +93,10 @@ class _LabaPageState extends State<LabaPage> {
                   'labaBersih': 0,
                 };
 
+                final omset = data['pendapatan'] ?? 0;
                 final labaKotor = data['labaKotor'] ?? 0;
                 final labaBersih = data['labaBersih'] ?? 0;
+                final npm = omset > 0 ? ((labaBersih / omset) * 100).toStringAsFixed(1) : "0.0";
 
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
@@ -122,11 +124,12 @@ class _LabaPageState extends State<LabaPage> {
                           ),
                           const Divider(height: 24),
 
-                          _buildLabaRow("Pendapatan / Omset", "Rp ${fmt.format(data['pendapatan'])}"),
-                          _buildLabaRow("Beban Gaji", "Rp ${fmt.format(data['bebanGaji'])}", color: Colors.red.shade700),
+                          _buildLabaRow("Pendapatan / Omset Bulanan", "Rp ${fmt.format(omset)}"),
+                          _buildLabaRow("Pemasukan Lain", "Rp ${fmt.format(data['pemasukanLain'])}"),
+                          _buildLabaRow("Beban Gaji Bulanan", "Rp ${fmt.format(data['bebanGaji'])}", color: Colors.red.shade700),
                           const Divider(),
                           _buildLabaRow("Laba Kotor (10%)", "Rp ${fmt.format(labaKotor)}", color: Colors.purple.shade700, isBold: true),
-                          _buildLabaRow("Beban Operasional", "Rp ${fmt.format(data['bebanOps'])}", color: Colors.red.shade700),
+                          _buildLabaRow("Beban Operasional Bulanan", "Rp ${fmt.format(data['bebanOps'])}", color: Colors.red.shade700),
                           const Divider(thickness: 1.5),
 
                           Container(
@@ -138,20 +141,32 @@ class _LabaPageState extends State<LabaPage> {
                                 color: labaBersih >= 0 ? Colors.green.shade300 : Colors.red.shade300,
                               ),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            child: Column(
                               children: [
-                                const Text(
-                                  "LABA BERSIH",
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      "TOTAL LABA BERSIH",
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    Text(
+                                      "Rp ${fmt.format(labaBersih)}",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                        color: labaBersih >= 0 ? Colors.green.shade800 : Colors.red.shade800,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  "Rp ${fmt.format(labaBersih)}",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                    color: labaBersih >= 0 ? Colors.green.shade800 : Colors.red.shade800,
-                                  ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text("Net Profit Margin (NPM):", style: TextStyle(fontSize: 12, color: Colors.black87)),
+                                    Text("$npm %", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87)),
+                                  ],
                                 ),
                               ],
                             ),
