@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'localdatabase.dart';
-import 'laba_db.dart';
+import '../dbases/localdatabase.dart';
+import '../dbases/laba_db.dart';
 
 class LabaPage extends StatefulWidget {
   const LabaPage({super.key});
