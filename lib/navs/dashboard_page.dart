@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
-import 'localdatabase.dart';
-import 'gaji_db.dart';
+import '../dbases/localdatabase.dart';
+import '../dbases/gaji_db.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
