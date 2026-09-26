@@ -45,7 +45,7 @@ extension AbsenDao on AppDatabase {
     String metode = 'FINGERPRINT',
   }) async {
     final tglTarget = tanggal ?? DateTime.now();
-    final sekarang = DateTime( // <-- Diperbaiki: beri spasi antara 'final' dan 'sekarang'
+    final sekarang = DateTime(
       tglTarget.year,
       tglTarget.month,
       tglTarget.day,
