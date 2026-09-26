@@ -15,6 +15,21 @@ class _LabaPageState extends State<LabaPage> {
   final fmt = NumberFormat("#,###", "id_ID");
   DateTime bulan = DateTime.now();
 
+  void _pilihBulan() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: bulan,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      helpText: "PILIH BULAN & TAHUN",
+    );
+    if (picked != null) {
+      setState(() {
+        bulan = DateTime(picked.year, picked.month, 1);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -25,7 +40,7 @@ class _LabaPageState extends State<LabaPage> {
       ),
       body: Column(
         children: [
-          // Header Navigasi Bulan
+          // Header Navigasi Bulan (Diselaraskan dengan Kalender Absensi)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: Colors.brown.shade50,
@@ -40,9 +55,22 @@ class _LabaPageState extends State<LabaPage> {
                     });
                   },
                 ),
-                Text(
-                  "BULAN ${DateFormat('MMMM yyyy', 'id_ID').format(bulan).toUpperCase()}",
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                InkWell(
+                  onTap: _pilihBulan,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_month, size: 18, color: Colors.brown),
+                        const SizedBox(width: 6),
+                        Text(
+                          "BULAN ${DateFormat('MMMM yyyy', 'id_ID').format(bulan).toUpperCase()}",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.chevron_right),
@@ -56,9 +84,10 @@ class _LabaPageState extends State<LabaPage> {
             ),
           ),
 
-          // Real-time Update dengan FutureBuilder dinamis yang merefresh setiap pergantian state
+          // Real-time FutureBuilder dengan Key berbasis Bulan
           Expanded(
             child: FutureBuilder<Map<String, int>>(
+              key: ValueKey(bulan),
               future: db.hitungLabaBulanan(bulan),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -320,7 +349,7 @@ class _LabaPageState extends State<LabaPage> {
 
   String _generateRekomendasi(int labaBersih, double rasioGaji, double opexRatio, int totalPendapatan) {
     if (totalPendapatan == 0) {
-      return "Belum ada transaksi pendapatan bulan ini. Lakukan pencatatan log transaksi di Tab Live.";
+      return "Belum ada transaksi pendapatan bulan ini. Lakukan pencatatan log transaksi atau laporan harian.";
     }
     if (labaBersih < 0) {
       return "Usaha mengalami kerugian bulan ini. Kurangi beban operasional dan tinjau penetapan margin keuntungan.";
