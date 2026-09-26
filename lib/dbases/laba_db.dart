@@ -2,40 +2,46 @@ import 'package:drift/drift.dart';
 import 'localdatabase.dart';
 
 extension LabaDao on AppDatabase {
+  /// Menghitung akumulasi Laba Rugi Bulanan berdasarkan data LaporanHarian
   Future<Map<String, int>> hitungLabaBulanan(DateTime bulan) async {
     final awal = DateTime(bulan.year, bulan.month, 1, 0, 0, 0);
     final akhir = DateTime(bulan.year, bulan.month + 1, 0, 23, 59, 59, 999);
 
-    final gajiBulan = await (select(gajiMingguan)
-          ..where((t) => t.mingguMulai.isBiggerOrEqualValue(awal))
-          ..where((t) => t.mingguMulai.isSmallerOrEqualValue(akhir)))
+    // Ambil semua laporan harian dalam rentang bulan yang dipilih
+    final laporanList = await (select(laporanHarian)
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(awal))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(akhir)))
         .get();
 
-    int bebanGaji = gajiBulan.fold<int>(0, (p, e) => p + e.totalGaji);
+    int totalOmset = 0;
+    int totalPemasukanLain = 0;
+    int totalBebanOps = 0;
+    int totalBebanGaji = 0;
 
-    final pendapatanList = await (select(transaksi)
-          ..where((t) => t.jenis.equals('PENDAPATAN'))
-          ..where((t) => t.tanggal.isBetweenValues(awal, akhir)))
-        .get();
+    for (var l in laporanList) {
+      totalOmset += l.totalPenjualan;
+      totalPemasukanLain += l.tambahanLain;
+      totalBebanOps += l.bebanOperasional;
+      totalBebanGaji += l.totalGajiHariIni;
+    }
 
-    int pendapatan = pendapatanList.fold<int>(0, (p, e) => p + e.nominal);
+    // Kalkulasi Margin Laba Kotor 10%
+    int labaKotor = (totalOmset * 0.10).round();
 
-    final bebanOpsList = await (select(transaksi)
-          ..where((t) => t.jenis.equals('BEBAN_OPERASIONAL'))
-          ..where((t) => t.tanggal.isBetweenValues(awal, akhir)))
-        .get();
-
-    int bebanOps = bebanOpsList.fold<int>(0, (p, e) => p + e.nominal);
+    // LABA BERSIH = Laba Kotor + Pemasukan Lain - Beban Gaji - Beban Operasional
+    int labaBersih = labaKotor + totalPemasukanLain - totalBebanGaji - totalBebanOps;
 
     return {
-      'pendapatan': pendapatan,
-      'bebanGaji': bebanGaji,
-      'bebanOps': bebanOps,
-      'labaKotor': pendapatan - bebanGaji,
-      'labaBersih': pendapatan - bebanGaji - bebanOps,
+      'pendapatan': totalOmset,
+      'pemasukanLain': totalPemasukanLain,
+      'bebanGaji': totalBebanGaji,
+      'bebanOps': totalBebanOps,
+      'labaKotor': labaKotor,
+      'labaBersih': labaBersih,
     };
   }
 
+  /// Menghitung total beban gaji mingguan berdasarkan rentang tanggal tertentu
   Future<int> hitungBebanGajiPeriode(DateTime mulai, DateTime selesai) async {
     final start = DateTime(mulai.year, mulai.month, mulai.day, 0, 0, 0);
     final end = DateTime(selesai.year, selesai.month, selesai.day, 23, 59, 59, 999);
@@ -48,7 +54,10 @@ extension LabaDao on AppDatabase {
     return data.fold<int>(0, (sum, e) => sum + e.totalGaji);
   }
 
-  Future<int> simpanSimulasi(SimulasiLabaCompanion data) => into(simulasiLaba).insert(data);
+  // --- CRUD Simulasi Laba ---
+
+  Future<int> simpanSimulasi(SimulasiLabaCompanion data) =>
+      into(simulasiLaba).insert(data);
 
   Future<void> updateSimulasi(int id, SimulasiLabaCompanion data) =>
       (update(simulasiLaba)..where((t) => t.id.equals(id))).write(data);
@@ -57,5 +66,7 @@ extension LabaDao on AppDatabase {
       (delete(simulasiLaba)..where((t) => t.id.equals(id))).go();
 
   Stream<List<SimulasiLabaData>> watchSimulasi() =>
-      (select(simulasiLaba)..orderBy([(t) => OrderingTerm.desc(t.tanggalSimulasi)])).watch();
+      (select(simulasiLaba)
+            ..orderBy([(t) => OrderingTerm.desc(t.tanggalSimulasi)]))
+          .watch();
 }
