@@ -17,16 +17,18 @@ extension GajiDao on AppDatabase {
           ..sort((a, b) => a.jamMasuk.compareTo(b.jamMasuk));
         if (absenKar.isEmpty) continue;
 
+        // Grouping berdasarkan tanggal Senin awal minggu (00:00:00)
         Map<DateTime, List<AbsensiData>> perMinggu = {};
         for (var a in absenKar) {
-          final senin = a.jamMasuk.subtract(Duration(days: a.jamMasuk.weekday - 1));
-          final key = DateTime(senin.year, senin.month, senin.day);
+          final tgl = a.jamMasuk;
+          final senin = DateTime(tgl.year, tgl.month, tgl.day).subtract(Duration(days: tgl.weekday - 1));
+          final key = DateTime(senin.year, senin.month, senin.day, 0, 0, 0);
           perMinggu.putIfAbsent(key, () => []).add(a);
         }
 
         for (var entry in perMinggu.entries) {
-          final mingguMulai = entry.key;
-          final mingguSelesai = mingguMulai.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+          final mingguMulai = entry.key; // Senin 00:00:00
+          final mingguSelesai = DateTime(mingguMulai.year, mingguMulai.month, mingguMulai.day + 6, 23, 59, 59, 999);
           final list = entry.value;
 
           double efektif = 0;
@@ -34,6 +36,7 @@ extension GajiDao on AppDatabase {
             efektif += (a.tipeKerja == 'FULL' ? 1.0 : 0.5);
           }
 
+          // Query Bintang Mingguan
           final bintangMinggu = await (select(bintangHarian)
                 ..where((t) => t.karyawanId.equals(kar.id))
                 ..where((t) => t.tanggal.isBiggerOrEqualValue(mingguMulai))
@@ -74,15 +77,18 @@ extension GajiDao on AppDatabase {
               totalBonus: Value(bonusOtomatis),
             ));
           } else {
-            final bonusDipakai = existing.bonusMingguan == 0 ? bonusOtomatis : existing.bonusMingguan;
+            // Jika pengguna sudah menginput bonus secara manual (> 0), gunakan bonus manual, jika tidak gunakan bonusOtomatis
+            final bonusDipakai = existing.bonusMingguan > 0 ? existing.bonusMingguan : bonusOtomatis;
             final totalGajiBaru = gajiPokok + bonusDipakai;
 
             if (existing.totalHariEfektif != efektif ||
                 existing.totalGajiPokok != gajiPokok ||
                 existing.totalGaji != totalGajiBaru ||
-                existing.totalHariMasuk != list.length) {
+                existing.totalHariMasuk != list.length ||
+                existing.bonusMingguan != bonusDipakai) {
               await (update(gajiMingguan)..where((t) => t.id.equals(existing.id))).write(
                 GajiMingguanCompanion(
+                  mingguSelesai: Value(mingguSelesai),
                   totalHariEfektif: Value(efektif),
                   totalHariMasuk: Value(list.length),
                   totalJam: Value(efektif * 8),
@@ -122,7 +128,7 @@ extension GajiDao on AppDatabase {
   }
 
   Future<void> setBintang(int karyawanId, DateTime tgl, int bintang) async {
-    final day = DateTime(tgl.year, tgl.month, tgl.day);
+    final day = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final ex = await (select(bintangHarian)
           ..where((t) => t.karyawanId.equals(karyawanId))
           ..where((t) => t.tanggal.equals(day)))
@@ -142,7 +148,7 @@ extension GajiDao on AppDatabase {
   }
 
   Stream<List<BintangHarianData>> watchBintangHari(DateTime tgl) {
-    final day = DateTime(tgl.year, tgl.month, tgl.day);
+    final day = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     return (select(bintangHarian)..where((t) => t.tanggal.equals(day))).watch();
   }
 
@@ -156,10 +162,13 @@ extension GajiDao on AppDatabase {
   }
 
   Future<double> getRataBintangMingguan(int karyawanId, DateTime mulai, DateTime selesai) async {
+    final start = DateTime(mulai.year, mulai.month, mulai.day, 0, 0, 0);
+    final end = DateTime(selesai.year, selesai.month, selesai.day, 23, 59, 59, 999);
+
     final list = await (select(bintangHarian)
           ..where((t) => t.karyawanId.equals(karyawanId))
-          ..where((t) => t.tanggal.isBiggerOrEqualValue(DateTime(mulai.year, mulai.month, mulai.day)))
-          ..where((t) => t.tanggal.isSmallerOrEqualValue(DateTime(selesai.year, selesai.month, selesai.day, 23, 59, 59))))
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
         .get();
 
     if (list.isEmpty) return 0.0;
@@ -168,7 +177,7 @@ extension GajiDao on AppDatabase {
 
   Future<int> hitungGajiHariIni(DateTime tgl) async {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
-    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
 
     final absen = await (select(absensi)
           ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
@@ -206,7 +215,7 @@ extension GajiDao on AppDatabase {
     required int kasHariIni,
     required int totalPiutangAkhir,
   }) async {
-    final day = DateTime(tgl.year, tgl.month, tgl.day);
+    final day = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final ex = await (select(laporanHarian)..where((t) => t.tanggal.equals(day))).getSingleOrNull();
 
     final comp = LaporanHarianCompanion(
@@ -235,7 +244,7 @@ extension GajiDao on AppDatabase {
   }
 
   Stream<LaporanHarianData?> watchLaporanHari(DateTime tgl) {
-    final day = DateTime(tgl.year, tgl.month, tgl.day);
+    final day = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     return (select(laporanHarian)..where((t) => t.tanggal.equals(day))).watchSingleOrNull();
   }
 
