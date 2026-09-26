@@ -77,7 +77,6 @@ extension GajiDao on AppDatabase {
             final bonusDipakai = existing.bonusMingguan == 0 ? bonusOtomatis : existing.bonusMingguan;
             final totalGajiBaru = gajiPokok + bonusDipakai;
 
-            // Pengecekan ketat agar tidak memicu Stream Loop / UI Rebuild tak terbatas
             if (existing.totalHariEfektif != efektif ||
                 existing.totalGajiPokok != gajiPokok ||
                 existing.totalGaji != totalGajiBaru ||
@@ -190,19 +189,42 @@ extension GajiDao on AppDatabase {
     return total;
   }
 
-  Future<void> simpanLaporanHarian(DateTime tgl, int penjualan, int bebanOps, int tambahan, String ket, int gajiHari, int kotor, int bersih) async {
+  Future<void> simpanLaporanHarianFull({
+    required DateTime tgl,
+    required int omset,
+    required int cash,
+    required int piutangBaru,
+    required String namaPelanggan,
+    required int pemLain,
+    required String ketPemLain,
+    required int bebanGaji,
+    required int bebanOps,
+    required int kasbon,
+    required int piutangKemarin,
+    required int labaKotor,
+    required int labaBersih,
+    required int kasHariIni,
+    required int totalPiutangAkhir,
+  }) async {
     final day = DateTime(tgl.year, tgl.month, tgl.day);
     final ex = await (select(laporanHarian)..where((t) => t.tanggal.equals(day))).getSingleOrNull();
 
     final comp = LaporanHarianCompanion(
       tanggal: Value(day),
-      totalPenjualan: Value(penjualan),
+      totalPenjualan: Value(omset),
+      cash: Value(cash),
+      piutangBaru: Value(piutangBaru),
+      namaPelangganBon: Value(namaPelanggan),
+      tambahanLain: Value(pemLain),
+      keteranganTambahan: Value(ketPemLain),
+      totalGajiHariIni: Value(bebanGaji),
       bebanOperasional: Value(bebanOps),
-      tambahanLain: Value(tambahan),
-      keteranganTambahan: Value(ket),
-      totalGajiHariIni: Value(gajiHari),
-      labaKotor: Value(kotor),
-      labaBersih: Value(bersih),
+      kasbonKaryawan: Value(kasbon),
+      saldoPiutangKemarin: Value(piutangKemarin),
+      labaKotor: Value(labaKotor),
+      labaBersih: Value(labaBersih),
+      kasHariIni: Value(kasHariIni),
+      totalPiutangAkhir: Value(totalPiutangAkhir),
     );
 
     if (ex == null) {
