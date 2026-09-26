@@ -14,7 +14,7 @@ class GajiPage extends StatefulWidget {
 class _GajiPageState extends State<GajiPage> {
   final db = AppDatabase();
   final fmt = NumberFormat("#,###", "id_ID");
-  
+
   // State Filter Bulan (Header Ungu)
   DateTime _bulan = DateTime.now();
 
@@ -78,7 +78,7 @@ class _GajiPageState extends State<GajiPage> {
         return AlertDialog(
           title: const Text("Input Bonus Mingguan"),
           content: Column(
-            mainAxisSize: FullAxisSize.min,
+            mainAxisSize: MainAxisSize.min, // FIX 1: Diganti dari FullAxisSize.min
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("Akumulasi Rating Bintang: ${rataBintang.toStringAsFixed(1)} ★"),
@@ -428,7 +428,6 @@ class _GajiPageState extends State<GajiPage> {
                     // Sorting Bintang jika diaktifkan
                     if (_sortByStarsDesc) {
                       filtered.sort((a, b) {
-                        // Logika Sorting Async diproses pada list item langsung atau lewat snapshot pendukung
                         return b.totalGaji.compareTo(a.totalGaji);
                       });
                     }
@@ -540,7 +539,7 @@ class _GajiPageState extends State<GajiPage> {
                                                   style: const TextStyle(
                                                     color: Colors.blue,
                                                     fontWeight: FontWeight.bold,
-                                                    decoration: TextUnderline.none,
+                                                    decoration: TextDecoration.none, // FIX 2: Diganti dari TextUnderline.none
                                                   ),
                                                 ),
                                               ),
