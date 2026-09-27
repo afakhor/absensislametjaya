@@ -12,13 +12,15 @@ class KategoriKaryawan extends Table {
 class Karyawan extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get nama => text()();
-  IntColumn get kategoriId => integer().customConstraint('REFERENCES kategori_karyawan(id)')();
+  IntColumn get kategoriId =>
+      integer().customConstraint('REFERENCES kategori_karyawan(id) NOT NULL')();
   TextColumn get fotoPath => text().nullable()();
 }
 
 class Absensi extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id)')();
+  IntColumn get karyawanId =>
+      integer().customConstraint('REFERENCES karyawan(id) NOT NULL')();
   DateTimeColumn get jamMasuk => dateTime()();
   DateTimeColumn get jamPulang => dateTime().nullable()();
   RealColumn get totalJamKerja => real().withDefault(const Constant(8.0))();
@@ -29,7 +31,8 @@ class Absensi extends Table {
 
 class GajiMingguan extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id)')();
+  IntColumn get karyawanId =>
+      integer().customConstraint('REFERENCES karyawan(id) NOT NULL')();
   DateTimeColumn get mingguMulai => dateTime()();
   DateTimeColumn get mingguSelesai => dateTime()();
   RealColumn get totalHariEfektif => real().withDefault(const Constant(0))();
@@ -63,7 +66,8 @@ class AuditLog extends Table {
 
 class SimulasiLaba extends Table {
   IntColumn get id => integer().autoIncrement()();
-  DateTimeColumn get tanggalSimulasi => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get tanggalSimulasi =>
+      dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get periodeMulai => dateTime()();
   DateTimeColumn get periodeSelesai => dateTime()();
   IntColumn get omset => integer()();
@@ -80,7 +84,8 @@ class SimulasiLaba extends Table {
 
 class BintangHarian extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id) ON DELETE CASCADE')();
+  IntColumn get karyawanId => integer().customConstraint(
+      'REFERENCES karyawan(id) ON DELETE CASCADE NOT NULL')();
   DateTimeColumn get tanggal => dateTime()();
   IntColumn get bintang => integer().withDefault(const Constant(0))();
 }
@@ -96,17 +101,20 @@ class LaporanHarian extends Table {
   IntColumn get kasbonKaryawan => integer().withDefault(const Constant(0))();
   IntColumn get tambahanLain => integer().withDefault(const Constant(0))();
   TextColumn get keteranganTambahan => text().withDefault(const Constant(''))();
-  IntColumn get saldoPiutangKemarin => integer().withDefault(const Constant(0))();
+  IntColumn get saldoPiutangKemarin =>
+      integer().withDefault(const Constant(0))();
   IntColumn get totalGajiHariIni => integer().withDefault(const Constant(0))();
   IntColumn get labaKotor => integer().withDefault(const Constant(0))();
   IntColumn get labaBersih => integer().withDefault(const Constant(0))();
   IntColumn get kasHariIni => integer().withDefault(const Constant(0))();
-  IntColumn get totalPiutangAkhir => integer().withDefault(const Constant(0))();
+  IntColumn get totalPiutangAkhir =>
+      integer().withDefault(const Constant(0))();
 }
 
 class KasbonHarian extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id) ON DELETE CASCADE')();
+  IntColumn get karyawanId => integer().customConstraint(
+      'REFERENCES karyawan(id) ON DELETE CASCADE NOT NULL')();
   DateTimeColumn get tanggal => dateTime()();
   IntColumn get nominal => integer().withDefault(const Constant(0))();
   TextColumn get keterangan => text().withDefault(const Constant(''))();
@@ -129,7 +137,8 @@ class AppDatabase extends _$AppDatabase {
 
   factory AppDatabase() => _instance;
 
-  AppDatabase._internal() : super(driftDatabase(name: 'tb_slamet_jaya_v8_clean'));
+  AppDatabase._internal()
+      : super(driftDatabase(name: 'tb_slamet_jaya_v8_clean'));
 
   @override
   int get schemaVersion => 9;
@@ -161,7 +170,8 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(laporanHarian, laporanHarian.piutangBaru);
             await m.addColumn(laporanHarian, laporanHarian.namaPelangganBon);
             await m.addColumn(laporanHarian, laporanHarian.kasbonKaryawan);
-            await m.addColumn(laporanHarian, laporanHarian.saldoPiutangKemarin);
+            await m.addColumn(
+                laporanHarian, laporanHarian.saldoPiutangKemarin);
             await m.addColumn(laporanHarian, laporanHarian.kasHariIni);
             await m.addColumn(laporanHarian, laporanHarian.totalPiutangAkhir);
           }
@@ -231,11 +241,18 @@ class AppDatabase extends _$AppDatabase {
     int totalGaji = 0;
 
     for (var abs in absensiList) {
-      final kar = await (select(karyawan)..where((t) => t.id.equals(abs.karyawanId))).getSingleOrNull();
+      final kar = await (select(karyawan)
+            ..where((t) => t.id.equals(abs.karyawanId)))
+          .getSingleOrNull();
       if (kar != null) {
-        final kat = await (select(kategoriKaryawan)..where((t) => t.id.equals(kar.kategoriId))).getSingleOrNull();
+        final kat = await (select(kategoriKaryawan)
+              ..where((t) => t.id.equals(kar.kategoriId)))
+            .getSingleOrNull();
         if (kat != null) {
-          double pengali = (abs.tipeKerja == 'HALF' || abs.tipeKerja == 'SETENGAH') ? 0.5 : 1.0;
+          double pengali =
+              (abs.tipeKerja == 'HALF' || abs.tipeKerja == 'SETENGAH')
+                  ? 0.5
+                  : 1.0;
           totalGaji += (kat.tarifPerHari * pengali).round();
         }
       }
