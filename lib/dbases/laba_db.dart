@@ -3,54 +3,61 @@ import 'localdatabase.dart';
 import 'gaji_db.dart';
 
 extension LabaDao on AppDatabase {
-  /// Menghitung akumulasi Laba Rugi Bulanan berdasarkan LaporanHarian & Transaksi
+  /// Menghitung akumulasi Laba Rugi Bulanan secara konsisten
+  /// Sinkron dengan logika tanggal pada Kalender Absensi
   Future<Map<String, int>> hitungLabaBulanan(DateTime bulan) async {
-    // Batas awal bulan (Tgl 1 jam 00:00:00)
+    // Batas awal bulan (00:00:00 hari pertama)
     final awal = DateTime(bulan.year, bulan.month, 1, 0, 0, 0);
-    // Batas akhir bulan (Tgl terakhir jam 23:59:59.999) secara akurat
-    final akhir = DateTime(bulan.year, bulan.month + 1, 1)
-        .subtract(const Duration(milliseconds: 1));
-
-    // 1. Ambil data dari Laporan Harian
-    final laporanList = await (select(laporanHarian)
-          ..where((t) => t.tanggal.isBiggerOrEqualValue(awal))
-          ..where((t) => t.tanggal.isSmallerOrEqualValue(akhir)))
-        .get();
+    // Batas akhir bulan (23:59:59 hari terakhir bulan tersebut)
+    final akhir = DateTime(bulan.year, bulan.month + 1, 0, 23, 59, 59, 999);
 
     int totalOmset = 0;
     int totalPemasukanLain = 0;
     int totalBebanOps = 0;
     int totalBebanGaji = 0;
 
-    if (laporanList.isNotEmpty) {
-      for (var l in laporanList) {
-        totalOmset += l.totalPenjualan;
-        totalPemasukanLain += l.tambahanLain;
-        totalBebanOps += l.bebanOperasional;
-        totalBebanGaji += l.totalGajiHariIni;
-      }
-    } else {
-      // 2. Fallback: Ambil data dari tabel Transaksi jika Laporan Harian belum direkap
-      final transaksiList = await (select(transaksi)
-            ..where((t) => t.tanggal.isBiggerOrEqualValue(awal))
-            ..where((t) => t.tanggal.isSmallerOrEqualValue(akhir)))
-          .get();
+    // -------------------------------------------------------------
+    // 1. Ambil Data dari Laporan Harian
+    // -------------------------------------------------------------
+    final laporanList = await (select(laporanHarian)
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(awal))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(akhir)))
+        .get();
 
-      for (var trx in transaksiList) {
-        if (trx.jenis.toUpperCase() == 'PEMASUKAN' || trx.jenis.toUpperCase() == 'OMSET') {
-          totalOmset += trx.nominal;
-        } else if (trx.jenis.toUpperCase() == 'PENGELUARAN' || trx.jenis.toUpperCase() == 'BEBAN') {
-          totalBebanOps += trx.nominal;
-        } else if (trx.jenis.toUpperCase() == 'LAIN') {
-          totalPemasukanLain += trx.nominal;
-        }
-      }
+    for (var l in laporanList) {
+      totalOmset += l.totalPenjualan;
+      totalPemasukanLain += l.tambahanLain;
+      totalBebanOps += l.bebanOperasional;
+      totalBebanGaji += l.totalGajiHariIni;
+    }
 
-      // Hitung beban gaji dari rekapitulasi penggajian/absensi periode bulan ini
+    // -------------------------------------------------------------
+    // 2. Ambil Data Tambahan dari Tabel Transaksi (jika ada)
+    // -------------------------------------------------------------
+    final transaksiList = await (select(transaksi)
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(awal))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(akhir)))
+        .get();
+
+    for (var trx in transaksiList) {
+      final jenis = trx.jenis.toUpperCase();
+      if (jenis == 'PEMASUKAN' || jenis == 'OMSET') {
+        totalOmset += trx.nominal;
+      } else if (jenis == 'PENGELUARAN' || jenis == 'BEBAN') {
+        totalBebanOps += trx.nominal;
+      } else if (jenis == 'LAIN') {
+        totalPemasukanLain += trx.nominal;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 3. Jika Beban Gaji masih 0, Hitung Langsung dari Absensi Harian
+    // -------------------------------------------------------------
+    if (totalBebanGaji == 0) {
       totalBebanGaji = await hitungBebanGajiPeriode(awal, akhir);
     }
 
-    // Perhitungan Laba Kotor (10% dari total omset)
+    // Kalkulasi Laba Kotor (10% dari Omset Penjualan)
     int labaKotor = (totalOmset * 0.10).round();
 
     // LABA BERSIH = Laba Kotor + Pemasukan Lain - Beban Gaji - Beban Operasional
@@ -66,21 +73,23 @@ extension LabaDao on AppDatabase {
     };
   }
 
-  /// Menghitung total beban gaji berdasarkan rentang tanggal
+  /// Menghitung total beban gaji karyawan berdasarkan rentang tanggal
   Future<int> hitungBebanGajiPeriode(DateTime mulai, DateTime selesai) async {
     final start = DateTime(mulai.year, mulai.month, mulai.day, 0, 0, 0);
     final end = DateTime(selesai.year, selesai.month, selesai.day, 23, 59, 59, 999);
 
-    final data = await (select(gajiMingguan)
+    // Kueri 1: Cek Rekapitulasi Gaji Mingguan
+    final dataGaji = await (select(gajiMingguan)
           ..where((t) => t.mingguMulai.isBiggerOrEqualValue(start))
           ..where((t) => t.mingguSelesai.isSmallerOrEqualValue(end)))
         .get();
 
-    if (data.isNotEmpty) {
-      return data.fold<int>(0, (sum, e) => sum + e.totalGaji);
+    if (dataGaji.isNotEmpty) {
+      final sumGaji = dataGaji.fold<int>(0, (sum, e) => sum + e.totalGaji);
+      if (sumGaji > 0) return sumGaji;
     }
 
-    // Jika gaji mingguan belum dihitung, hitung dari absensi harian
+    // Kueri 2: Hitung langsung dari Log Absensi (Normalized Date Matching)
     final absenList = await (select(absensi)
           ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
           ..where((t) => t.jamMasuk.isSmallerOrEqualValue(end)))
@@ -95,6 +104,7 @@ extension LabaDao on AppDatabase {
     for (var a in absenList) {
       final kar = allKar.where((k) => k.id == a.karyawanId).firstOrNull;
       if (kar == null) continue;
+      
       final kat = allKat.where((k) => k.id == kar.kategoriId).firstOrNull;
       if (kat == null) continue;
 
@@ -105,7 +115,7 @@ extension LabaDao on AppDatabase {
     return totalGajiAbsen;
   }
 
-  // --- Simulasi Laba ---
+  // --- CRUD Simulasi Laba ---
   Future<int> simpanSimulasi(SimulasiLabaCompanion data) =>
       into(simulasiLaba).insert(data);
 
