@@ -3,7 +3,8 @@ import 'localdatabase.dart';
 
 extension GajiDao on AppDatabase {
   /// Input atau Update Kasbon Harian Karyawan
-  Future<void> simpanKasbonHarian(int karyawanId, DateTime tgl, int nominal, String ket) async {
+  Future<void> simpanKasbonHarian(
+      int karyawanId, DateTime tgl, int nominal, String ket) async {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
 
@@ -31,9 +32,11 @@ extension GajiDao on AppDatabase {
   }
 
   /// Ambil Total Kasbon Karyawan dalam Rentang Tanggal Mingguan
-  Future<int> getKasbonPeriode(int karyawanId, DateTime mulai, DateTime selesai) async {
+  Future<int> getKasbonPeriode(
+      int karyawanId, DateTime mulai, DateTime selesai) async {
     final start = DateTime(mulai.year, mulai.month, mulai.day, 0, 0, 0);
-    final end = DateTime(selesai.year, selesai.month, selesai.day, 23, 59, 59, 999);
+    final end =
+        DateTime(selesai.year, selesai.month, selesai.day, 23, 59, 59, 999);
 
     final list = await (select(kasbonHarian)
           ..where((t) => t.karyawanId.equals(karyawanId))
@@ -77,14 +80,16 @@ extension GajiDao on AppDatabase {
         Map<DateTime, List<AbsensiData>> perMinggu = {};
         for (var a in absenKar) {
           final tgl = a.jamMasuk;
-          final senin = DateTime(tgl.year, tgl.month, tgl.day).subtract(Duration(days: tgl.weekday - 1));
+          final senin = DateTime(tgl.year, tgl.month, tgl.day)
+              .subtract(Duration(days: tgl.weekday - 1));
           final key = DateTime(senin.year, senin.month, senin.day, 0, 0, 0);
           perMinggu.putIfAbsent(key, () => []).add(a);
         }
 
         for (var entry in perMinggu.entries) {
           final mingguMulai = entry.key;
-          final mingguSelesai = DateTime(mingguMulai.year, mingguMulai.month, mingguMulai.day + 6, 23, 59, 59, 999);
+          final mingguSelesai = DateTime(
+              mingguMulai.year, mingguMulai.month, mingguMulai.day + 6, 23, 59, 59, 999);
           final list = entry.value;
 
           double efektif = 0;
@@ -100,7 +105,10 @@ extension GajiDao on AppDatabase {
 
           double rataBintang = 0;
           if (bintangMinggu.isNotEmpty) {
-            rataBintang = bintangMinggu.map((e) => e.bintang).reduce((a, b) => a + b) / bintangMinggu.length;
+            rataBintang = bintangMinggu
+                    .map((e) => e.bintang)
+                    .reduce((a, b) => a + b) /
+                bintangMinggu.length;
           }
 
           int bonusOtomatis = 0;
@@ -132,10 +140,13 @@ extension GajiDao on AppDatabase {
               totalBonus: Value(bonusOtomatis),
             ));
           } else {
-            final bonusDipakai = existing.bonusMingguan > 0 ? existing.bonusMingguan : bonusOtomatis;
+            final bonusDipakai = existing.bonusMingguan > 0
+                ? existing.bonusMingguan
+                : bonusOtomatis;
             final totalGajiBaru = gajiPokok + bonusDipakai;
 
-            await (update(gajiMingguan)..where((t) => t.id.equals(existing.id))).write(
+            await (update(gajiMingguan)..where((t) => t.id.equals(existing.id)))
+                .write(
               GajiMingguanCompanion(
                 mingguSelesai: Value(mingguSelesai),
                 totalHariEfektif: Value(efektif),
@@ -159,9 +170,11 @@ extension GajiDao on AppDatabase {
   }
 
   Future<void> inputBonusMingguan(int gajiId, int bonus) async {
-    final g = await (select(gajiMingguan)..where((t) => t.id.equals(gajiId))).getSingleOrNull();
+    final g = await (select(gajiMingguan)..where((t) => t.id.equals(gajiId)))
+        .getSingleOrNull();
     if (g == null) return;
-    await (update(gajiMingguan)..where((t) => t.id.equals(gajiId))).write(GajiMingguanCompanion(
+    await (update(gajiMingguan)..where((t) => t.id.equals(gajiId)))
+        .write(GajiMingguanCompanion(
       bonusMingguan: Value(bonus),
       totalBonus: Value(bonus),
       totalGaji: Value(g.totalGajiPokok + bonus),
@@ -169,15 +182,18 @@ extension GajiDao on AppDatabase {
   }
 
   Future<void> tandaiBayar(int gajiId, String status) async {
-    await (update(gajiMingguan)..where((t) => t.id.equals(gajiId))).write(GajiMingguanCompanion(
+    await (update(gajiMingguan)..where((t) => t.id.equals(gajiId)))
+        .write(GajiMingguanCompanion(
       statusBayar: Value(status),
       tanggalBayar: Value(status != 'BELUM' ? DateTime.now() : null),
     ));
   }
 
-  Future<double> getRataBintangMingguan(int karyawanId, DateTime mulai, DateTime selesai) async {
+  Future<double> getRataBintangMingguan(
+      int karyawanId, DateTime mulai, DateTime selesai) async {
     final start = DateTime(mulai.year, mulai.month, mulai.day, 0, 0, 0);
-    final end = DateTime(selesai.year, selesai.month, selesai.day, 23, 59, 59, 999);
+    final end =
+        DateTime(selesai.year, selesai.month, selesai.day, 23, 59, 59, 999);
 
     final list = await (select(bintangHarian)
           ..where((t) => t.karyawanId.equals(karyawanId))
