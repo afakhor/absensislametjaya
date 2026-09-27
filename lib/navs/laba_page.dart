@@ -40,7 +40,7 @@ class _LabaPageState extends State<LabaPage> {
       ),
       body: Column(
         children: [
-          // Header Navigasi Bulan (Diselaraskan dengan Kalender Absensi)
+          // Header Navigasi Bulan (Konsisten dengan Kalender Absensi)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: Colors.brown.shade50,
@@ -203,7 +203,7 @@ class _LabaPageState extends State<LabaPage> {
                       ),
                       const SizedBox(height: 16),
 
-                      // CARD 2: ANALISIS KESEHATAN FINANSIAL LEBIH LENGKAP
+                      // CARD 2: ANALISIS KESEHATAN FINANSIAL
                       Card(
                         elevation: 3,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -349,13 +349,13 @@ class _LabaPageState extends State<LabaPage> {
 
   String _generateRekomendasi(int labaBersih, double rasioGaji, double opexRatio, int totalPendapatan) {
     if (totalPendapatan == 0) {
-      return "Belum ada transaksi pendapatan bulan ini. Lakukan pencatatan log transaksi atau laporan harian.";
+      return "Belum ada transaksi pendapatan bulan ini. Lakukan pencatatan log transaksi di Tab Live.";
     }
     if (labaBersih < 0) {
       return "Usaha mengalami kerugian bulan ini. Kurangi beban operasional dan tinjau penetapan margin keuntungan.";
     }
     if (rasioGaji > 35) {
-      return "Beban gaji relatif tinggi dibanding pendapatan. Pertimbangkan peningkatkan target omset harian.";
+      return "Beban gaji relatif tinggi dibanding pendapatan. Pertimbangkan peningkatan target omset harian.";
     }
     if (labaBersih > 0 && rasioGaji <= 30) {
       return "Kondisi keuangan sehat! Tingkat rasio gaji dan margin laba bersih berada pada batas ideal.";
