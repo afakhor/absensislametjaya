@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../dbases/localdatabase.dart';
-import '../dbases/gaji_db.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -18,12 +17,11 @@ class _DashboardPageState extends State<DashboardPage> {
   DateTime nowLive = DateTime.now();
   Timer? timer;
 
-  // Controllers Input Harian Widget Live (9 Inputan Utama)
   final omsetC = TextEditingController(text: "0");
   final cashC = TextEditingController(text: "0");
-  final pendingC = TextEditingController(text: "0"); // Cash / Pending
+  final pendingC = TextEditingController(text: "0");
   final pemLainC = TextEditingController(text: "0");
-  final marginC = TextEditingController(text: "10"); // Default Margin 10%
+  final marginC = TextEditingController(text: "10");
   final bebanOpsC = TextEditingController(text: "0");
   final kasbonC = TextEditingController(text: "0");
   final bebanLainC = TextEditingController(text: "0");
@@ -106,7 +104,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-void _dialogInputKasbon(BuildContext context, int karyawanId, String nama) {
+  void _dialogInputKasbon(BuildContext context, int karyawanId, String nama) {
     final txtC = TextEditingController();
     showDialog(
       context: context,
@@ -139,7 +137,6 @@ void _dialogInputKasbon(BuildContext context, int karyawanId, String nama) {
       ),
     );
   }
-
 
   Widget _liveTab() {
     final today = DateTime.now();
@@ -321,138 +318,137 @@ void _dialogInputKasbon(BuildContext context, int karyawanId, String nama) {
                         ),
                         const SizedBox(height: 12),
 
+                        StreamBuilder<LaporanHarianData?>(
+                          stream: db.watchLaporanHari(today),
+                          builder: (c, lapSnap) {
+                            final lap = lapSnap.data;
+                            if (lap != null && omsetC.text == "0" && lap.totalPenjualan > 0) {
+                              omsetC.text = lap.totalPenjualan.toString();
+                              cashC.text = lap.cash.toString();
+                              pendingC.text = lap.piutangBaru.toString();
+                              pemLainC.text = lap.tambahanLain.toString();
+                              bebanOpsC.text = lap.bebanOperasional.toString();
+                              kasbonC.text = lap.kasbonKaryawan.toString();
+                              bebanLainC.text = lap.saldoPiutangKemarin.toString();
+                            }
 
-                    StreamBuilder<LaporanHarianData?>(
-                      stream: db.watchLaporanHari(today),
-                      builder: (c, lapSnap) {
-                        final lap = lapSnap.data;
-                        if (lap != null && omsetC.text == "0" && lap.totalPenjualan > 0) {
-                          omsetC.text = lap.totalPenjualan.toString();
-                          cashC.text = lap.cash.toString();
-                          pendingC.text = lap.piutangBaru.toString();
-                          pemLainC.text = lap.tambahanLain.toString();
-                          bebanOpsC.text = lap.bebanOperasional.toString();
-                          kasbonC.text = lap.kasbonKaryawan.toString();
-                          bebanLainC.text = lap.saldoPiutangKemarin.toString(); // Dipetakan ke kolom bebanLain / piutang
-                        }
+                            return Card(
+                              color: Colors.blue.shade50,
+                              elevation: 3,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text("FORMAT HARIAN TB. SLAMET JAYA",
+                                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
+                                    const Divider(),
 
-                        return Card(
-                          color: Colors.blue.shade50,
-                          elevation: 3,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text("FORMAT HARIAN TB. SLAMET JAYA",
-                                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
-                                const Divider(),
+                                    const Text("1. Omset & Kas Masuk", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    _buildField("Omset Hari Ini", omsetC),
+                                    _buildField("Cash Hari Ini", cashC),
+                                    _buildField("Cash / Pending", pendingC),
+                                    _buildField("Pemasukan Lain", pemLainC),
 
-                                const Text("1. Omset & Kas Masuk", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                _buildField("Omset Hari Ini", omsetC),
-                                _buildField("Cash Hari Ini", cashC),
-                                _buildField("Cash / Pending", pendingC),
-                                _buildField("Pemasukan Lain", pemLainC),
+                                    const SizedBox(height: 10),
+                                    const Text("2. Parameter Margin & Beban", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    _buildField("Margin (%)", marginC),
+                                    _buildField("Beban Ops", bebanOpsC),
+                                    _buildField("Kasbon Karyawan", kasbonC),
+                                    _buildField("Beban Lain", bebanLainC),
 
-                                const SizedBox(height: 10),
-                                const Text("2. Parameter Margin & Beban", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                _buildField("Margin (%)", marginC),
-                                _buildField("Beban Ops", bebanOpsC),
-                                _buildField("Kasbon Karyawan", kasbonC),
-                                _buildField("Beban Lain", bebanLainC),
+                                    const SizedBox(height: 12),
+                                    FutureBuilder<int>(
+                                      future: db.hitungGajiHariIni(today),
+                                      builder: (c, gajiSnap) {
+                                        final bebanGaji = gajiSnap.data ?? 0;
+                                        final omset = _parse(omsetC.text);
+                                        final cash = _parse(cashC.text);
+                                        final pending = _parse(pendingC.text);
+                                        final pemLain = _parse(pemLainC.text);
+                                        final marginPct = _parse(marginC.text) / 100.0;
+                                        final bebanOps = _parse(bebanOpsC.text);
+                                        final kasbon = _parse(kasbonC.text);
+                                        final bebanLain = _parse(bebanLainC.text);
 
-                                const SizedBox(height: 12),
-                                FutureBuilder<int>(
-                                  future: db.hitungGajiHariIni(today),
-                                  builder: (c, gajiSnap) {
-                                    final bebanGaji = gajiSnap.data ?? 0;
-                                    final omset = _parse(omsetC.text);
-                                    final cash = _parse(cashC.text);
-                                    final pending = _parse(pendingC.text);
-                                    final pemLain = _parse(pemLainC.text);
-                                    final marginPct = _parse(marginC.text) / 100.0;
-                                    final bebanOps = _parse(bebanOpsC.text);
-                                    final kasbon = _parse(kasbonC.text);
-                                    final bebanLain = _parse(bebanLainC.text);
+                                        final labaKotor = (omset * (marginPct > 0 ? marginPct : 0.10)).round();
+                                        final labaBersih = labaKotor + pemLain - bebanGaji - bebanOps - bebanLain;
+                                        final kasHariIni = cash + pemLain - bebanGaji - bebanOps - kasbon - bebanLain;
+                                        final totalBebanHarian = bebanGaji + bebanOps + bebanLain;
+                                        final rasioBebanOmset = omset > 0 ? ((totalBebanHarian / omset) * 100).toStringAsFixed(1) : "0.0";
 
-                                    // Calculations / Algoritma Inti
-                                    final labaKotor = (omset * (marginPct > 0 ? marginPct : 0.10)).round();
-                                    final labaBersih = labaKotor + pemLain - bebanGaji - bebanOps - bebanLain;
-                                    final kasHariIni = cash + pemLain - bebanGaji - bebanOps - kasbon - bebanLain;
-                                    final totalBebanHarian = bebanGaji + bebanOps + bebanLain;
-                                    final rasioBebanOmset = omset > 0 ? ((totalBebanHarian / omset) * 100).toStringAsFixed(1) : "0.0";
-
-                                    return Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.purple.shade50,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: Colors.purple.shade200),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          _buildRow("Beban Gaji (Otomasis Absensi)", "Rp ${fmt.format(bebanGaji)}", Colors.brown.shade800),
-                                          const Divider(),
-                                          _buildRow("Laba Kotor (${(marginPct * 100).toInt()}%)", "Rp ${fmt.format(labaKotor)}", Colors.purple.shade900),
-                                          _buildRow("LABA BERSIH", "Rp ${fmt.format(labaBersih)}",
-                                              labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700, isBold: true),
-                                          const Divider(),
-                                          _buildRow("KAS HARI INI (Di Laci)", "Rp ${fmt.format(kasHariIni)}", Colors.blue.shade900, isBold: true),
-                                          const Divider(),
-                                          // Otomatisasi Analisis Live
-                                          _buildRow("Total Beban Harian", "Rp ${fmt.format(totalBebanHarian)}", Colors.red.shade800),
-                                          _buildRow("Rasio Beban / Omset", "$rasioBebanOmset %", Colors.black87),
-                                          _buildRow("Pending / Piutang Baru", "Rp ${fmt.format(pending)}", Colors.orange.shade800),
-                                          const SizedBox(height: 12),
-                                          SizedBox(
-                                            width: double.infinity,
-                                            height: 44,
-                                            child: ElevatedButton(
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.brown.shade800,
-                                                foregroundColor: Colors.white,
-                                              ),
-                                              onPressed: () async {
-                                                await db.simpanLaporanHarianFull(
-                                                  tgl: today,
-                                                  omset: omset,
-                                                  cash: cash,
-                                                  piutangBaru: pending,
-                                                  namaPelanggan: "",
-                                                  pemLain: pemLain,
-                                                  ketPemLain: "",
-                                                  bebanGaji: bebanGaji,
-                                                  bebanOps: bebanOps,
-                                                  kasbon: kasbon,
-                                                  piutangKemarin: bebanLain,
-                                                  labaKotor: labaKotor,
-                                                  labaBersih: labaBersih,
-                                                  kasHariIni: kasHariIni,
-                                                  totalPiutangAkhir: pending + bebanLain,
-                                                );
-                                                _loadBulan();
-                                                if (context.mounted) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(content: Text("Log Live Berhasil Disimpan")),
-                                                  );
-                                                }
-                                              },
-                                              child: const Text("SIMPAN LOG LIVE", style: TextStyle(fontWeight: FontWeight.bold)),
-                                            ),
+                                        return Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple.shade50,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: Colors.purple.shade200),
                                           ),
-                                        ],
-                                      ),
-                                    );
-                                  },
+                                          child: Column(
+                                            children: [
+                                              _buildRow("Beban Gaji (Otomasis Absensi)", "Rp ${fmt.format(bebanGaji)}", Colors.brown.shade800),
+                                              const Divider(),
+                                              _buildRow("Laba Kotor (${(marginPct * 100).toInt()}%)", "Rp ${fmt.format(labaKotor)}", Colors.purple.shade900),
+                                              _buildRow("LABA BERSIH", "Rp ${fmt.format(labaBersih)}",
+                                                  labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700, isBold: true),
+                                              const Divider(),
+                                              _buildRow("KAS HARI INI (Di Laci)", "Rp ${fmt.format(kasHariIni)}", Colors.blue.shade900, isBold: true),
+                                              const Divider(),
+                                              _buildRow("Total Beban Harian", "Rp ${fmt.format(totalBebanHarian)}", Colors.red.shade800),
+                                              _buildRow("Rasio Beban / Omset", "$rasioBebanOmset %", Colors.black87),
+                                              _buildRow("Pending / Piutang Baru", "Rp ${fmt.format(pending)}", Colors.orange.shade800),
+                                              const SizedBox(height: 12),
+                                              SizedBox(
+                                                width: double.infinity,
+                                                height: 44,
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.brown.shade800,
+                                                    foregroundColor: Colors.white,
+                                                  ),
+                                                  onPressed: () async {
+                                                    await db.simpanLaporanHarianFull(
+                                                      tgl: today,
+                                                      omset: omset,
+                                                      cash: cash,
+                                                      piutangBaru: pending,
+                                                      namaPelanggan: "",
+                                                      pemLain: pemLain,
+                                                      ketPemLain: "",
+                                                      bebanGaji: bebanGaji,
+                                                      bebanOps: bebanOps,
+                                                      kasbon: kasbon,
+                                                      piutangKemarin: bebanLain,
+                                                      labaKotor: labaKotor,
+                                                      labaBersih: labaBersih,
+                                                      kasHariIni: kasHariIni,
+                                                      totalPiutangAkhir: pending + bebanLain,
+                                                    );
+                                                    _loadBulan();
+                                                    if (context.mounted) {
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        const SnackBar(content: Text("Log Live Berhasil Disimpan")),
+                                                      );
+                                                    }
+                                                  },
+                                                  child: const Text("SIMPAN LOG LIVE", style: TextStyle(fontWeight: FontWeight.bold)),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             );
@@ -537,7 +533,6 @@ void _dialogInputKasbon(BuildContext context, int karyawanId, String nama) {
                   .where((l) => l.tanggal.isAfter(start.subtract(const Duration(seconds: 1))) && l.tanggal.isBefore(end.add(const Duration(seconds: 1))))
                   .toList();
 
-              // Akumulasi Mingguan / Periode Terpilih
               int accOmset = 0;
               int accLabaBersih = 0;
               int accKasbon = 0;
