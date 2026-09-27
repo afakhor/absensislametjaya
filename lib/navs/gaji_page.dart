@@ -7,8 +7,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'localdatabase.dart';
-import 'gaji_db.dart';
+import '../dbases/localdatabase.dart';
+import '../dbases/gaji_db.dart';
 
 class GajiPage extends StatefulWidget {
   const GajiPage({super.key});
