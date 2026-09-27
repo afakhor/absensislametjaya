@@ -1,10 +1,12 @@
-name: Build APK TB Slamet Jaya
+name: Build APK + IPA TB Slamet Jaya
+
 on:
   push:
     branches: [ main, master ]
 
 jobs:
-  build:
+  build-android:
+    name: Build APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,13 +18,12 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.8' # FIX: upgrade dari 3.22.2
+          flutter-version: '3.32.8'
           channel: 'stable'
 
-      - name: Clean old flutter_blue_plus cache
+      - name: Clean old cache
         run: |
           rm -rf /home/runner/.pub-cache/hosted/pub.dev/flutter_blue_plus*
-          rm -rf android/.gradle
           flutter clean
 
       - run: flutter pub get
@@ -33,3 +34,42 @@ jobs:
         with:
           name: Absensi-TB-Slamet-Jaya-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+
+  build-ios:
+    name: Build IPA (tanpa signing)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+          channel: 'stable'
+
+      - name: Install Pods
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      - name: Build IPA no-codesign
+        run: |
+          flutter build ios --release --no-codesign --no-tree-shake-icons
+          mkdir -p build/ios/ipa
+          cd ios
+          # Buat archive tanpa signing biar jadi .xcarchive
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release archive -archivePath ../build/ios/Runner.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          cd ..
+          # Bungkus jadi .ipa palsu (buat cek, bukan buat install real device)
+          mkdir -p build/ios/ipa/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+          cd build/ios/ipa
+          zip -r TB-SLAMET-JAYA-unsigned.ipa Payload
+          cd ../../..
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Absensi-TB-Slamet-Jaya-IPA-Unsigned
+          path: build/ios/ipa/TB-SLAMET-JAYA-unsigned.ipa
