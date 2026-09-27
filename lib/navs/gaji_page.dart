@@ -17,7 +17,11 @@ class _GajiPageState extends State<GajiPage> {
 
   DateTime _bulan = DateTime.now();
   List<int> _selectedKaryawanIds = [];
-  List<String> _selectedStatusColors = [];
+  
+  // Filter gabungan
+  List<String> _selectedStatusColors = []; // Menyimpan 'BELUM', 'MINGGU1', 'MINGGU2'/'LUNAS'
+  bool _filterHanyaKasbon = false;        // Menyimpan status chip Kasbon
+  
   DateTimeRange? _selectedDateRange;
   bool _sortByStarsDesc = false;
   bool _isLoadingProses = false;
@@ -133,6 +137,7 @@ class _GajiPageState extends State<GajiPage> {
     );
   }
 
+  // --- MODAL FILTER DISATUKAN (MERAH, KUNING, HIJAU, KASBON) ---
   void _showFilterModal(List<KaryawanData> listKar) {
     showModalBottomSheet(
       context: context,
@@ -158,6 +163,7 @@ class _GajiPageState extends State<GajiPage> {
                             setModalState(() {
                               _selectedKaryawanIds.clear();
                               _selectedStatusColors.clear();
+                              _filterHanyaKasbon = false;
                               _selectedDateRange = null;
                               _sortByStarsDesc = false;
                             });
@@ -187,10 +193,13 @@ class _GajiPageState extends State<GajiPage> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    const Text("Filter Warna Status:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
+                    
+                    // --- OPSI FILTER MENYATU SESUAI DESAIN LINGKARAN MERAH ---
+                    const Text("Filter Warna Status & Warning:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
                     Wrap(
                       spacing: 8,
+                      runSpacing: 8,
                       children: [
                         FilterChip(
                           label: const Text("🔴 Merah (Belum)"),
@@ -228,9 +237,21 @@ class _GajiPageState extends State<GajiPage> {
                             setState(() {});
                           },
                         ),
+                        FilterChip(
+                          label: const Text("⚠️ Ada Kasbon", style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)),
+                          selected: _filterHanyaKasbon,
+                          selectedColor: Colors.amber.shade100,
+                          onSelected: (val) {
+                            setModalState(() {
+                              _filterHanyaKasbon = val;
+                            });
+                            setState(() {});
+                          },
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
+                    
                     const Text("Filter Karyawan (Pilih 1 atau Lebih):", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Wrap(
@@ -371,31 +392,32 @@ class _GajiPageState extends State<GajiPage> {
 
                 final allData = snap.data ?? [];
 
+                // --- PROSES LOGIKA FILTERING ---
                 var filtered = allData.where((g) {
+                  // Filter Tanggal / Bulan
                   if (_selectedDateRange != null) {
                     if (g.mingguMulai.isBefore(_selectedDateRange!.start) ||
                         g.mingguSelesai.isAfter(_selectedDateRange!.end)) {
                       return false;
                     }
                   } else {
-                    // Cek jika transaksi berada di bulan/tahun yang terpilih
                     bool matchMonth = (g.mingguMulai.month == _bulan.month && g.mingguMulai.year == _bulan.year) ||
                         (g.mingguSelesai.month == _bulan.month && g.mingguSelesai.year == _bulan.year);
                     if (!matchMonth) return false;
                   }
 
+                  // Filter Karyawan Spesifik
                   if (_selectedKaryawanIds.isNotEmpty && !_selectedKaryawanIds.contains(g.karyawanId)) {
                     return false;
                   }
 
+                  // Filter Pilihan Warna Status (Merah / Kuning / Hijau)
                   if (_selectedStatusColors.isNotEmpty && !_selectedStatusColors.contains(g.statusBayar)) {
                     return false;
                   }
 
                   return true;
                 }).toList();
-
-                final totalGajiBulanIni = filtered.fold<int>(0, (sum, item) => sum + item.totalGaji);
 
                 if (filtered.isEmpty) {
                   return Center(
@@ -429,193 +451,210 @@ class _GajiPageState extends State<GajiPage> {
                       filtered.sort((a, b) => b.totalGaji.compareTo(a.totalGaji));
                     }
 
-                    return Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          color: Colors.purple.shade50,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                "Total Rekap Periode Ini:",
-                                style: TextStyle(fontSize: 12, color: Colors.purple.shade900, fontWeight: FontWeight.w600),
-                              ),
-                              Text(
-                                "Rp ${fmt.format(totalGajiBulanIni)}",
-                                style: TextStyle(fontSize: 14, color: Colors.purple.shade900, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: ListView.builder(
-                            padding: const EdgeInsets.all(8),
-                            itemCount: filtered.length,
-                            itemBuilder: (_, i) {
-                              final g = filtered[i];
-                              final kar = listKar.where((k) => k.id == g.karyawanId).firstOrNull;
-                              final colorStatus = _getWarnaStatus(g.statusBayar);
+                    return ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final g = filtered[i];
+                        final kar = listKar.where((k) => k.id == g.karyawanId).firstOrNull;
+                        final colorStatus = _getWarnaStatus(g.statusBayar);
 
-                              return Card(
-                                elevation: 2,
-                                margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                                child: ExpansionTile(
-                                  leading: Container(
-                                    width: 12,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: colorStatus,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
+                        return FutureBuilder<int>(
+                          future: db.getKasbonPeriode(g.karyawanId, g.mingguMulai, g.mingguSelesai),
+                          builder: (context, kasbonSnap) {
+                            final kasbonPeriode = kasbonSnap.data ?? 0;
+                            final totalTerimaBersih = g.totalGaji - kasbonPeriode;
+
+                            // LOGIKA FILTER KASBON:
+                            // Apabila chip "⚠️ Ada Kasbon" aktif DAN karyawan ini tidak memiliki kasbon, sembunyikan baris ini
+                            if (_filterHanyaKasbon && kasbonPeriode <= 0) {
+                              return const SizedBox.shrink();
+                            }
+
+                            return Card(
+                              elevation: 2,
+                              margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                              child: ExpansionTile(
+                                leading: Container(
+                                  width: 12,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: colorStatus,
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
-                                  title: Text(
-                                    kar?.nama ?? "Karyawan ID: ${g.karyawanId}",
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  subtitle: Text(
-                                    "Periode: ${DateFormat('dd/MM').format(g.mingguMulai)} - ${DateFormat('dd/MM/yy').format(g.mingguSelesai)} | ${g.totalHariEfektif} Hari",
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  trailing: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        "Rp ${fmt.format(g.totalGaji)}",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                          color: Colors.green,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: colorStatus.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(4),
-                                          border: Border.all(color: colorStatus, width: 0.8),
-                                        ),
-                                        child: Text(
-                                          _getLabelStatus(g.statusBayar),
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: colorStatus,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                ),
+                                title: Row(
                                   children: [
-                                    Padding(
-                                      padding: const EdgeInsets.all(16.0),
-                                      child: Column(
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              const Text("Gaji Pokok:"),
-                                              Text("Rp ${fmt.format(g.totalGajiPokok)}"),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              const Text("Bonus Mingguan:",
-                                                  style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w600)),
-                                              InkWell(
-                                                onTap: () => _dialogBonus(context, g),
-                                                child: Text(
-                                                  "Rp ${fmt.format(g.bonusMingguan)}",
-                                                  style: const TextStyle(
-                                                    color: Colors.blue,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              const Text("Total Diterima:"),
-                                              Text(
-                                                "Rp ${fmt.format(g.totalGaji)}",
-                                                style: const TextStyle(fontWeight: FontWeight.bold),
-                                              ),
-                                            ],
-                                          ),
-                                          const Divider(),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              FutureBuilder<double>(
-                                                future: db.getRataBintangMingguan(g.karyawanId, g.mingguMulai, g.mingguSelesai),
-                                                builder: (context, starSnap) {
-                                                  final starVal = starSnap.data ?? 0.0;
-                                                  return OutlinedButton.icon(
-                                                    icon: const Icon(Icons.star, size: 16, color: Colors.orange),
-                                                    label: Text(
-                                                      "Star: ${starVal.toStringAsFixed(1)} ★",
-                                                      style: const TextStyle(fontSize: 11, color: Colors.orange),
-                                                    ),
-                                                    onPressed: () => _dialogBonus(context, g),
-                                                  );
-                                                },
-                                              ),
-                                              PopupMenuButton<String>(
-                                                onSelected: (v) async {
-                                                  await db.tandaiBayar(g.id, v);
-                                                  setState(() {});
-                                                },
-                                                itemBuilder: (_) => [
-                                                  const PopupMenuItem(
-                                                    value: 'BELUM',
-                                                    child: Text("🔴 Belum (Merah)"),
-                                                  ),
-                                                  const PopupMenuItem(
-                                                    value: 'MINGGU1',
-                                                    child: Text("🟡 1 Minggu (Kuning)"),
-                                                  ),
-                                                  const PopupMenuItem(
-                                                    value: 'MINGGU2',
-                                                    child: Text("🟢 Lunas (Hijau)"),
-                                                  ),
-                                                ],
-                                                child: Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.brown.shade800,
-                                                    borderRadius: BorderRadius.circular(6),
-                                                  ),
-                                                  child: const Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Text(
-                                                        "Ubah Status",
-                                                        style: TextStyle(color: Colors.white, fontSize: 12),
-                                                      ),
-                                                      Icon(Icons.arrow_drop_down, color: Colors.white, size: 16),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
+                                    Text(
+                                      kar?.nama ?? "Karyawan ID: ${g.karyawanId}",
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    if (kasbonPeriode > 0) ...[
+                                      const SizedBox(width: 6),
+                                      const Icon(Icons.money_off, size: 16, color: Colors.red),
+                                    ]
+                                  ],
+                                ),
+                                subtitle: Text(
+                                  "Periode: ${DateFormat('dd/MM').format(g.mingguMulai)} - ${DateFormat('dd/MM/yy').format(g.mingguSelesai)} | ${g.totalHariEfektif} Hari",
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                trailing: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      "Rp ${fmt.format(totalTerimaBersih)}",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: totalTerimaBersih >= 0 ? Colors.green : Colors.red,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: colorStatus.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: colorStatus, width: 0.8),
+                                      ),
+                                      child: Text(
+                                        _getLabelStatus(g.statusBayar),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: colorStatus,
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Text("Gaji Pokok:"),
+                                            Text("Rp ${fmt.format(g.totalGajiPokok)}"),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Text("Bonus Mingguan:",
+                                                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w600)),
+                                            InkWell(
+                                              onTap: () => _dialogBonus(context, g),
+                                              child: Text(
+                                                "Rp ${fmt.format(g.bonusMingguan)}",
+                                                style: const TextStyle(
+                                                  color: Colors.blue,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Text("Potongan Kasbon:",
+                                                style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+                                            Text(
+                                              "- Rp ${fmt.format(kasbonPeriode)}",
+                                              style: const TextStyle(
+                                                color: Colors.red,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const Divider(),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Text("Total Diterima Bersih:", style: TextStyle(fontWeight: FontWeight.bold)),
+                                            Text(
+                                              "Rp ${fmt.format(totalTerimaBersih)}",
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: totalTerimaBersih >= 0 ? Colors.green.shade800 : Colors.red.shade800,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const Divider(),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            FutureBuilder<double>(
+                                              future: db.getRataBintangMingguan(g.karyawanId, g.mingguMulai, g.mingguSelesai),
+                                              builder: (context, starSnap) {
+                                                final starVal = starSnap.data ?? 0.0;
+                                                return OutlinedButton.icon(
+                                                  icon: const Icon(Icons.star, size: 16, color: Colors.orange),
+                                                  label: Text(
+                                                    "Star: ${starVal.toStringAsFixed(1)} ★",
+                                                    style: const TextStyle(fontSize: 11, color: Colors.orange),
+                                                  ),
+                                                  onPressed: () => _dialogBonus(context, g),
+                                                );
+                                              },
+                                            ),
+                                            PopupMenuButton<String>(
+                                              onSelected: (v) async {
+                                                await db.tandaiBayar(g.id, v);
+                                                setState(() {});
+                                              },
+                                              itemBuilder: (_) => [
+                                                const PopupMenuItem(
+                                                  value: 'BELUM',
+                                                  child: Text("🔴 Belum (Merah)"),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'MINGGU1',
+                                                  child: Text("🟡 1 Minggu (Kuning)"),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'MINGGU2',
+                                                  child: Text("🟢 Lunas (Hijau)"),
+                                                ),
+                                              ],
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.brown.shade800,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      "Ubah Status",
+                                                      style: TextStyle(color: Colors.white, fontSize: 12),
+                                                    ),
+                                                    Icon(Icons.arrow_drop_down, color: Colors.white, size: 16),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
                     );
                   },
                 );
