@@ -1,6 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:drift/drift.dart' hide Column;
+import 'package:drift/drift.dart' hide Column, Row;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../dbases/localdatabase.dart';
 import '../dbases/gaji_db.dart';
 
@@ -17,11 +23,10 @@ class _GajiPageState extends State<GajiPage> {
 
   DateTime _bulan = DateTime.now();
   List<int> _selectedKaryawanIds = [];
-  
-  // Filter gabungan
-  List<String> _selectedStatusColors = []; // Menyimpan 'BELUM', 'MINGGU1', 'MINGGU2'/'LUNAS'
-  bool _filterHanyaKasbon = false;        // Menyimpan status chip Kasbon
-  
+
+  List<String> _selectedStatusColors = [];
+  bool _filterHanyaKasbon = false;
+
   DateTimeRange? _selectedDateRange;
   bool _sortByStarsDesc = false;
   bool _isLoadingProses = false;
@@ -70,6 +75,188 @@ class _GajiPageState extends State<GajiPage> {
       default:
         return '🔴 Belum';
     }
+  }
+
+  // --- FUNGSI GENERATE PDF SLIP GAJI ---
+  Future<pw.Document> _generatePdfSlipGaji({
+    required String namaKaryawan,
+    required String periode,
+    required int gajiPokok,
+    required int bonus,
+    required int kasbon,
+    required int totalTerima,
+  }) async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80, // Format ukuran struk thermal 80mm
+        margin: const pw.EdgeInsets.all(12),
+        build: (pw.Context context) {
+          return pw.Column(
+            cross: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(
+                child: pw.Text(
+                  "TB. SLAMET JAYA",
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.orange800,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Center(
+                child: pw.Text(
+                  "DUSUN JRANJANG RT 12/RW 6 KELURAHAN KERTOSUKO KECAMATAN KRUCIL KABUPATEN PROBOLINGGO (082229109246)",
+                  textAlign: pw.TextAlign.center,
+                  style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+                ),
+              ),
+              pw.SizedBox(height: 6),
+              pw.Divider(thickness: 0.8),
+              pw.SizedBox(height: 4),
+
+              // Info Karyawan
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Nama:", style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(namaKaryawan, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+              pw.SizedBox(height: 2),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Periode:", style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(periode, style: const pw.TextStyle(fontSize: 8)),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+              pw.Divider(thickness: 0.8),
+              pw.SizedBox(height: 4),
+
+              // Rincian Gaji Realtime
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Gaji Pokok", style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text("Rp ${fmt.format(gajiPokok)}", style: const pw.TextStyle(fontSize: 9)),
+                ],
+              ),
+              pw.SizedBox(height: 2),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Bonus Mingguan", style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text("Rp ${fmt.format(bonus)}", style: const pw.TextStyle(fontSize: 9)),
+                ],
+              ),
+              pw.SizedBox(height: 2),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Potongan Kasbon", style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text("- Rp ${fmt.format(kasbon)}", style: const pw.TextStyle(fontSize: 9)),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+              pw.Divider(thickness: 0.8),
+              pw.SizedBox(height: 4),
+
+              // Total & Tanggal
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("TOTAL TERIMA:", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Text("Rp ${fmt.format(totalTerima)}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+              pw.SizedBox(height: 2),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Tgl Terima:", style: const pw.TextStyle(fontSize: 8)),
+                  pw.Text(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()), style: const pw.TextStyle(fontSize: 8)),
+                ],
+              ),
+              pw.SizedBox(height: 16),
+
+              // Tanda Tangan Owner
+              pw.Align(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Column(
+                  cross: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Text("Bpk. Slamet", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 1),
+                    pw.Text("CEO SLAMET JAYA", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  // --- FUNGSI SHARE SLIP GAJI KE WHATSAPP ---
+  Future<void> _shareSlipGajiWhatsApp({
+    required String namaKaryawan,
+    required String periode,
+    required int gajiPokok,
+    required int bonus,
+    required int kasbon,
+    required int totalTerima,
+  }) async {
+    final pdf = await _generatePdfSlipGaji(
+      namaKaryawan: namaKaryawan,
+      periode: periode,
+      gajiPokok: gajiPokok,
+      bonus: bonus,
+      kasbon: kasbon,
+      totalTerima: totalTerima,
+    );
+
+    final bytes = await pdf.save();
+    final output = await getTemporaryDirectory();
+    final filePath = "${output.path}/Slip_Gaji_${namaKaryawan.replaceAll(' ', '_')}.pdf";
+    final file = File(filePath);
+    await file.writeAsBytes(bytes);
+
+    // Kirim File PDF via Share Sheet (bisa pilih WhatsApp)
+    await Share.shareXFiles(
+      [XFile(filePath)],
+      text: "*SLIP GAJI TB. SLAMET JAYA*\nNama: $namaKaryawan\nPeriode: $periode\nTotal Diterima: Rp ${fmt.format(totalTerima)}",
+    );
+  }
+
+  // --- FUNGSI PRINT STRUK THERMAL ---
+  Future<void> _printSlipGajiStruk({
+    required String namaKaryawan,
+    required String periode,
+    required int gajiPokok,
+    required int bonus,
+    required int kasbon,
+    required int totalTerima,
+  }) async {
+    final pdf = await _generatePdfSlipGaji(
+      namaKaryawan: namaKaryawan,
+      periode: periode,
+      gajiPokok: gajiPokok,
+      bonus: bonus,
+      kasbon: kasbon,
+      totalTerima: totalTerima,
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
   }
 
   void _dialogBonus(BuildContext context, GajiMingguanData g) async {
@@ -137,7 +324,6 @@ class _GajiPageState extends State<GajiPage> {
     );
   }
 
-  // --- MODAL FILTER DISATUKAN (MERAH, KUNING, HIJAU, KASBON) ---
   void _showFilterModal(List<KaryawanData> listKar) {
     showModalBottomSheet(
       context: context,
@@ -193,8 +379,6 @@ class _GajiPageState extends State<GajiPage> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    
-                    // --- OPSI FILTER MENYATU SESUAI DESAIN LINGKARAN MERAH ---
                     const Text("Filter Warna Status & Warning:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 6),
                     Wrap(
@@ -251,7 +435,6 @@ class _GajiPageState extends State<GajiPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    
                     const Text("Filter Karyawan (Pilih 1 atau Lebih):", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Wrap(
@@ -392,9 +575,7 @@ class _GajiPageState extends State<GajiPage> {
 
                 final allData = snap.data ?? [];
 
-                // --- PROSES LOGIKA FILTERING ---
                 var filtered = allData.where((g) {
-                  // Filter Tanggal / Bulan
                   if (_selectedDateRange != null) {
                     if (g.mingguMulai.isBefore(_selectedDateRange!.start) ||
                         g.mingguSelesai.isAfter(_selectedDateRange!.end)) {
@@ -406,12 +587,10 @@ class _GajiPageState extends State<GajiPage> {
                     if (!matchMonth) return false;
                   }
 
-                  // Filter Karyawan Spesifik
                   if (_selectedKaryawanIds.isNotEmpty && !_selectedKaryawanIds.contains(g.karyawanId)) {
                     return false;
                   }
 
-                  // Filter Pilihan Warna Status (Merah / Kuning / Hijau)
                   if (_selectedStatusColors.isNotEmpty && !_selectedStatusColors.contains(g.statusBayar)) {
                     return false;
                   }
@@ -458,6 +637,8 @@ class _GajiPageState extends State<GajiPage> {
                         final g = filtered[i];
                         final kar = listKar.where((k) => k.id == g.karyawanId).firstOrNull;
                         final colorStatus = _getWarnaStatus(g.statusBayar);
+                        final namaKaryawan = kar?.nama ?? "Karyawan ID: ${g.karyawanId}";
+                        final strPeriode = "${DateFormat('dd/MM').format(g.mingguMulai)} - ${DateFormat('dd/MM/yy').format(g.mingguSelesai)}";
 
                         return FutureBuilder<int>(
                           future: db.getKasbonPeriode(g.karyawanId, g.mingguMulai, g.mingguSelesai),
@@ -465,8 +646,6 @@ class _GajiPageState extends State<GajiPage> {
                             final kasbonPeriode = kasbonSnap.data ?? 0;
                             final totalTerimaBersih = g.totalGaji - kasbonPeriode;
 
-                            // LOGIKA FILTER KASBON:
-                            // Apabila chip "⚠️ Ada Kasbon" aktif DAN karyawan ini tidak memiliki kasbon, sembunyikan baris ini
                             if (_filterHanyaKasbon && kasbonPeriode <= 0) {
                               return const SizedBox.shrink();
                             }
@@ -486,7 +665,7 @@ class _GajiPageState extends State<GajiPage> {
                                 title: Row(
                                   children: [
                                     Text(
-                                      kar?.nama ?? "Karyawan ID: ${g.karyawanId}",
+                                      namaKaryawan,
                                       style: const TextStyle(fontWeight: FontWeight.bold),
                                     ),
                                     if (kasbonPeriode > 0) ...[
@@ -496,7 +675,7 @@ class _GajiPageState extends State<GajiPage> {
                                   ],
                                 ),
                                 subtitle: Text(
-                                  "Periode: ${DateFormat('dd/MM').format(g.mingguMulai)} - ${DateFormat('dd/MM/yy').format(g.mingguSelesai)} | ${g.totalHariEfektif} Hari",
+                                  "Periode: $strPeriode | ${g.totalHariEfektif} Hari",
                                   style: const TextStyle(fontSize: 11),
                                 ),
                                 trailing: Column(
@@ -593,19 +772,34 @@ class _GajiPageState extends State<GajiPage> {
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            FutureBuilder<double>(
-                                              future: db.getRataBintangMingguan(g.karyawanId, g.mingguMulai, g.mingguSelesai),
-                                              builder: (context, starSnap) {
-                                                final starVal = starSnap.data ?? 0.0;
-                                                return OutlinedButton.icon(
-                                                  icon: const Icon(Icons.star, size: 16, color: Colors.orange),
-                                                  label: Text(
-                                                    "Star: ${starVal.toStringAsFixed(1)} ★",
-                                                    style: const TextStyle(fontSize: 11, color: Colors.orange),
+                                            // TOMBOL PRINT & SHARE WHATSAPP
+                                            Row(
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(Icons.print, color: Colors.blue),
+                                                  tooltip: "Cetak Struk Thermal",
+                                                  onPressed: () => _printSlipGajiStruk(
+                                                    namaKaryawan: namaKaryawan,
+                                                    periode: strPeriode,
+                                                    gajiPokok: g.totalGajiPokok,
+                                                    bonus: g.bonusMingguan,
+                                                    kasbon: kasbonPeriode,
+                                                    totalTerima: totalTerimaBersih,
                                                   ),
-                                                  onPressed: () => _dialogBonus(context, g),
-                                                );
-                                              },
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(Icons.share, color: Colors.green),
+                                                  tooltip: "Share WA (Slip Gaji)",
+                                                  onPressed: () => _shareSlipGajiWhatsApp(
+                                                    namaKaryawan: namaKaryawan,
+                                                    periode: strPeriode,
+                                                    gajiPokok: g.totalGajiPokok,
+                                                    bonus: g.bonusMingguan,
+                                                    kasbon: kasbonPeriode,
+                                                    totalTerima: totalTerimaBersih,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                             PopupMenuButton<String>(
                                               onSelected: (v) async {
