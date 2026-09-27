@@ -4,16 +4,19 @@ import 'localdatabase.dart';
 extension GajiDao on AppDatabase {
   /// Input atau Update Kasbon Harian Karyawan
   Future<void> simpanKasbonHarian(int karyawanId, DateTime tgl, int nominal, String ket) async {
-    final day = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
+    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
+
     final ex = await (select(kasbonHarian)
           ..where((t) => t.karyawanId.equals(karyawanId))
-          ..where((t) => t.tanggal.equals(day)))
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
         .getSingleOrNull();
 
     if (ex == null) {
       await into(kasbonHarian).insert(KasbonHarianCompanion.insert(
         karyawanId: karyawanId,
-        tanggal: day,
+        tanggal: start,
         nominal: Value(nominal),
         keterangan: Value(ket),
       ));
@@ -43,8 +46,12 @@ extension GajiDao on AppDatabase {
 
   /// Stream Kasbon Hari Ini untuk Live Dashboard
   Stream<List<KasbonHarianData>> watchKasbonHariIni(DateTime tgl) {
-    final day = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
-    return (select(kasbonHarian)..where((t) => t.tanggal.equals(day))).watch();
+    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
+    return (select(kasbonHarian)
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+        .watch();
   }
 
   Future<void> prosesHitungGajiMingguan() async {
@@ -54,7 +61,12 @@ extension GajiDao on AppDatabase {
       final allKat = await select(kategoriKaryawan).get();
 
       for (var kar in allKar) {
-        final kat = allKat.where((k) => k.id == kar.kategoriId).firstOrNull;
+        KategoriKaryawanData? kat;
+        try {
+          kat = allKat.firstWhere((k) => k.id == kar.kategoriId);
+        } catch (_) {
+          kat = null;
+        }
         if (kat == null) continue;
 
         final tarif = kat.tarifPerHari;
