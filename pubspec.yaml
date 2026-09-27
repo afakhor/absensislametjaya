@@ -24,15 +24,12 @@ dependencies:
   share_plus: ^9.0.0
   path_provider: ^2.1.2
 
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
   drift_dev: ^2.19.0
   build_runner: ^2.4.0
   flutter_lints: ^3.0.0
-  analyzer: ^14.4.0
-
 
 flutter:
   uses-material-design: true
