@@ -6,76 +6,60 @@ on:
 
 jobs:
   build-android:
-    name: Build APK
+    name: 1. Build APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.8'
           channel: 'stable'
-
-      - name: Clean total + Fix opus & blue_plus
+      - name: Clean total
         run: |
           flutter clean
-          rm -rf ios/Pods
-          rm -rf ios/Podfile.lock
-          rm -rf ios/.symlinks
+          rm -rf ios/Pods ios/Podfile.lock ios/.symlinks
           rm -rf ~/.pub-cache/hosted/pub.dev/flutter_blue_plus*
-          rm -rf /home/runner/.pub-cache/hosted/pub.dev/flutter_blue_plus*
           flutter pub get
-
-      - run: dart run build_runner build --delete-conflicting-outputs
-      - run: flutter build apk --release --no-tree-shake-icons
-
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Build APK
+        run: flutter build apk --release --no-tree-shake-icons
+      - name: Rename APK
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/TB-SLAMET-JAYA-APK.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Absensi-TB-Slamet-Jaya-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: 1-APK-Android
+          path: build/app/outputs/flutter-apk/TB-SLAMET-JAYA-APK.apk
 
-  build-ios:
-    name: Build IPA tanpa signing
+  build-ios-unsigned:
+    name: 2. Build IPA Unsigned (TrollStore)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.8'
           channel: 'stable'
-
-      - name: Clean total + Pod Fix + Fix AppDelegate
+      - name: Fix AppDelegate + Clean Pod
         run: |
-          flutter clean
-          rm -rf ios/Pods
-          rm -rf ios/Podfile.lock
-          rm -rf ios/.symlinks
-          rm -rf ios/Runner/SceneDelegate.swift
-          rm -rf ~/.pub-cache/hosted/pub.dev/flutter_blue_plus*
-          
-          # TIMPA AppDelegate.swift yang error jadi versi baru
+          rm -f ios/Runner/SceneDelegate.swift
           cat > ios/Runner/AppDelegate.swift <<'EOF'
           import Flutter
           import UIKit
-
           @main
           @objc class AppDelegate: FlutterAppDelegate {
-            override func application(
-              _ application: UIApplication,
-              didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-            ) -> Bool {
+            override func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
               GeneratedPluginRegistrant.register(with: self)
               return super.application(application, didFinishLaunchingWithOptions: launchOptions)
             }
           }
           EOF
-
+          sed -i '' '/SceneDelegate.swift/d' ios/Runner.xcodeproj/project.pbxproj || sed -i '/SceneDelegate.swift/d' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' '/SceneDelegate/d' ios/Runner.xcodeproj/project.pbxproj || sed -i '/SceneDelegate/d' ios/Runner.xcodeproj/project.pbxproj
+          flutter clean
           flutter pub get
           dart run build_runner build --delete-conflicting-outputs
           cd ios
@@ -83,19 +67,56 @@ jobs:
           pod deintegrate
           pod install --repo-update
           cd ..
-
-      - name: Build IPA no-codesign
+      - name: Build IPA Unsigned
         run: |
           flutter build ios --release --no-codesign --no-tree-shake-icons
-          mkdir -p build/ios/ipa
-          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release archive -archivePath build/ios/Runner.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -sdk iphoneos
           mkdir -p build/ios/ipa/Payload
           cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
           cd build/ios/ipa
-          zip -r TB-SLAMET-JAYA-unsigned.ipa Payload
+          zip -r TB-SLAMET-JAYA-UNSIGNED-TROLLSTORE.ipa Payload
           cd ../../..
-
       - uses: actions/upload-artifact@v4
         with:
-          name: Absensi-TB-Slamet-Jaya-IPA-Unsigned
-          path: build/ios/ipa/TB-SLAMET-JAYA-unsigned.ipa
+          name: 2-IPA-UNSIGNED-TrollStore
+          path: build/ios/ipa/TB-SLAMET-JAYA-UNSIGNED-TROLLSTORE.ipa
+
+  build-ios-signed:
+    name: 3. Build IPA Signed (TestFlight/Sideloadly)
+    runs-on: macos-14
+    # Job ini akan skip kalau kamu belum set Apple Secret, biar gak error
+    if: vars.ENABLE_SIGNED_BUILD == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+          channel: 'stable'
+      - name: Fix AppDelegate + Clean Pod
+        run: |
+          rm -f ios/Runner/SceneDelegate.swift
+          cat > ios/Runner/AppDelegate.swift <<'EOF'
+          import Flutter
+          import UIKit
+          @main
+          @objc class AppDelegate: FlutterAppDelegate {
+            override func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+              GeneratedPluginRegistrant.register(with: self)
+              return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+            }
+          }
+          EOF
+          sed -i '' '/SceneDelegate.swift/d' ios/Runner.xcodeproj/project.pbxproj || sed -i '/SceneDelegate.swift/d' ios/Runner.xcodeproj/project.pbxproj
+          flutter clean
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          cd ios
+          pod install --repo-update
+          cd ..
+      - name: Build IPA Signed
+        run: |
+          flutter build ipa --release --no-tree-shake-icons --export-options-plist=ios/Runner/ExportOptions.plist
+          mv build/ios/ipa/*.ipa build/ios/ipa/TB-SLAMET-JAYA-SIGNED-TESTFLIGHT.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 3-IPA-SIGNED-TestFlight
+          path: build/ios/ipa/TB-SLAMET-JAYA-SIGNED-TESTFLIGHT.ipa
