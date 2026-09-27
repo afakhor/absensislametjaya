@@ -317,7 +317,6 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
-
                         StreamBuilder<LaporanHarianData?>(
                           stream: db.watchLaporanHari(today),
                           builder: (c, lapSnap) {
