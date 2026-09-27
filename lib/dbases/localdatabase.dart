@@ -298,4 +298,28 @@ class AppDatabase extends _$AppDatabase {
       ),
     );
   }
+
+  Future<void> simpanKasbonHarian(
+      int karyawanId, DateTime tanggal, int nominal, String keterangan) async {
+    final startOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day);
+    await into(kasbonHarian).insertOnConflictUpdate(
+      KasbonHarianCompanion.insert(
+        karyawanId: karyawanId,
+        tanggal: startOfDay,
+        nominal: Value(nominal),
+        keterangan: Value(keterangan),
+      ),
+    );
+  }
+
+  Stream<List<KasbonHarianData>> watchKasbonHariIni(DateTime tanggal) {
+    final startOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day);
+    final endOfDay =
+        DateTime(tanggal.year, tanggal.month, tanggal.day, 23, 59, 59, 999);
+
+    return (select(kasbonHarian)
+          ..where((tbl) => tbl.tanggal.isBiggerOrEqualValue(startOfDay))
+          ..where((tbl) => tbl.tanggal.isSmallerOrEqualValue(endOfDay)))
+        .watch();
+  }
 }
