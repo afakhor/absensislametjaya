@@ -93,7 +93,7 @@ class _GajiPageState extends State<GajiPage> {
         margin: const pw.EdgeInsets.all(12),
         build: (pw.Context context) {
           return pw.Column(
-            cross: pw.CrossAxisAlignment.start,
+            crossAxisAlignment: pw.CrossAxisAlignment.start, // FIXED: cross -> crossAxisAlignment
             children: [
               pw.Center(
                 child: pw.Text(
@@ -183,7 +183,7 @@ class _GajiPageState extends State<GajiPage> {
               pw.Align(
                 alignment: pw.Alignment.centerRight,
                 child: pw.Column(
-                  cross: pw.CrossAxisAlignment.center,
+                  crossAxisAlignment: pw.CrossAxisAlignment.center, // FIXED: cross -> crossAxisAlignment
                   children: [
                     pw.Text("Bpk. Slamet", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                     pw.SizedBox(height: 1),
@@ -627,7 +627,7 @@ class _GajiPageState extends State<GajiPage> {
                       itemCount: filtered.length,
                       itemBuilder: (_, i) {
                         final g = filtered[i];
-                        
+
                         KaryawanData? kar;
                         try {
                           kar = listKar.firstWhere((k) => k.id == g.karyawanId);
@@ -638,7 +638,6 @@ class _GajiPageState extends State<GajiPage> {
                         final colorStatus = _getWarnaStatus(g.statusBayar);
                         final namaKaryawan = kar?.nama ?? "Karyawan ID: ${g.karyawanId}";
                         final strPeriode = "${DateFormat('dd/MM').format(g.mingguMulai)} - ${DateFormat('dd/MM/yy').format(g.mingguSelesai)}";
-
                         return FutureBuilder<int>(
                           future: db.getKasbonPeriode(g.karyawanId, g.mingguMulai, g.mingguSelesai),
                           builder: (context, kasbonSnap) {
