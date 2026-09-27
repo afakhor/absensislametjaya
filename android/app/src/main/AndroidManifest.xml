@@ -1,22 +1,32 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-<!-- FINGERPRINT ALAT BLUETOOTH + FINGERPRINT HP -->
-<uses-permission android:name="android.permission.BLUETOOTH" />
-<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-<uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
-<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-<uses-permission android:name="android.permission.USE_BIOMETRIC" />
-<uses-permission android:name="android.permission.USE_FINGERPRINT" />
-<!-- KAMERA + STORAGE BUAT FOTO KARYAWAN -->
-<uses-permission android:name="android.permission.CAMERA" />
-<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-<uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
-<uses-feature android:name="android.hardware.fingerprint" android:required="false" />
-<uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- FINGERPRINT ALAT BLUETOOTH + FINGERPRINT HP -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission 
+        android:name="android.permission.BLUETOOTH_SCAN" 
+        android:usesPermissionFlags="neverForLocation" 
+        tools:remove="android:usesPermissionFlags" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+
+    <!-- KAMERA + STORAGE BUAT FOTO KARYAWAN -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Android 12 ke bawah -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Android 13 ke atas -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+    <!-- HARDWARE FEATURES -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <application
         android:label="Absensi Slamet Jaya"
         android:name="${applicationName}"
@@ -42,10 +52,16 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Tambahan query intent untuk pdf/printing & share file jika diperlukan -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
         </intent>
     </queries>
 </manifest>
