@@ -21,12 +21,16 @@ jobs:
           flutter-version: '3.32.8'
           channel: 'stable'
 
-      - name: Clean old cache
+      - name: Clean total + Fix opus & blue_plus
         run: |
-          rm -rf /home/runner/.pub-cache/hosted/pub.dev/flutter_blue_plus*
           flutter clean
+          rm -rf ios/Pods
+          rm -rf ios/Podfile.lock
+          rm -rf ios/.symlinks
+          rm -rf ~/.pub-cache/hosted/pub.dev/flutter_blue_plus*
+          rm -rf /home/runner/.pub-cache/hosted/pub.dev/flutter_blue_plus*
+          flutter pub get
 
-      - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter build apk --release --no-tree-shake-icons
 
@@ -36,8 +40,8 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
 
   build-ios:
-    name: Build IPA (tanpa signing)
-    runs-on: macos-latest
+    name: Build IPA tanpa signing
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
@@ -46,11 +50,19 @@ jobs:
           flutter-version: '3.32.8'
           channel: 'stable'
 
-      - name: Install Pods
+      - name: Clean total + Pod Fix
         run: |
+          flutter clean
+          rm -rf ios/Pods
+          rm -rf ios/Podfile.lock
+          rm -rf ios/.symlinks
+          rm -rf ~/Library/Caches/CocoaPods
+          rm -rf ~/.pub-cache/hosted/pub.dev/flutter_blue_plus*
           flutter pub get
           dart run build_runner build --delete-conflicting-outputs
           cd ios
+          pod cache clean --all
+          pod deintegrate
           pod install --repo-update
           cd ..
 
@@ -58,11 +70,7 @@ jobs:
         run: |
           flutter build ios --release --no-codesign --no-tree-shake-icons
           mkdir -p build/ios/ipa
-          cd ios
-          # Buat archive tanpa signing biar jadi .xcarchive
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release archive -archivePath ../build/ios/Runner.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
-          cd ..
-          # Bungkus jadi .ipa palsu (buat cek, bukan buat install real device)
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release archive -archivePath build/ios/Runner.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -sdk iphoneos
           mkdir -p build/ios/ipa/Payload
           cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
           cd build/ios/ipa
