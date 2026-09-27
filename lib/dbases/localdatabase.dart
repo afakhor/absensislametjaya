@@ -104,6 +104,15 @@ class LaporanHarian extends Table {
   IntColumn get totalPiutangAkhir => integer().withDefault(const Constant(0))();
 }
 
+class KasbonHarian extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get karyawanId => integer().customConstraint('REFERENCES karyawan(id) ON DELETE CASCADE')();
+  DateTimeColumn get tanggal => dateTime()();
+  IntColumn get nominal => integer().withDefault(const Constant(0))();
+  TextColumn get keterangan => text().withDefault(const Constant(''))();
+}
+
+
 @DriftDatabase(tables: [
   KategoriKaryawan,
   Karyawan,
@@ -113,7 +122,8 @@ class LaporanHarian extends Table {
   AuditLog,
   SimulasiLaba,
   BintangHarian,
-  LaporanHarian
+  LaporanHarian,
+  KasbonHarian
 ])
 class AppDatabase extends _$AppDatabase {
   static final AppDatabase _instance = AppDatabase._internal();
