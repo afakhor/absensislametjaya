@@ -16,18 +16,26 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
+// FORCE COMPILE SDK 35 UNTUK SEMUA SUBPROJECT/PLUGIN (FIX ERROR lStar / PRINTING)
 subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-// FORCE COMPILE SDK 35 UNTUK SEMUA PLUGIN / SUBPROJECT (FIX ERROR lStar / PRINTING)
-subprojects {
-    afterEvaluate {
+    val configureAndroid = {
         if (project.extensions.findByName("android") != null) {
             val android = project.extensions.getByName("android") as com.android.build.gradle.BaseExtension
             android.compileSdkVersion(35)
         }
     }
+
+    if (project.state.executed) {
+        configureAndroid()
+    } else {
+        project.afterEvaluate {
+            configureAndroid()
+        }
+    }
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
