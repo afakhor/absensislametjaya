@@ -171,7 +171,7 @@ class AppDatabase extends _$AppDatabase {
         },
       );
 
-  // --- HELPER METHODS UNTUK DASHBOARD ---
+  // --- HELPER METHODS DASHBOARD ---
 
   Future<void> updateTipeAbsen(int idAbsensi, String tipe) async {
     await (update(absensi)..where((t) => t.id.equals(idAbsensi)))
@@ -179,12 +179,13 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> setBintang(int karyawanId, DateTime tgl, int rating) async {
-    final start = DateTime(tgl.year, tgl.month, tgl.day);
-    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59);
+    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
 
     final existing = await (select(bintangHarian)
           ..where((t) => t.karyawanId.equals(karyawanId))
-          ..where((t) => t.tanggal.isBetweenValues(start, end)))
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
         .getSingleOrNull();
 
     if (existing != null) {
@@ -202,40 +203,31 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Stream<List<BintangHarianData>> watchBintangHari(DateTime tgl) {
-    final start = DateTime(tgl.year, tgl.month, tgl.day);
-    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59);
-    return (select(bintangHarian)..where((t) => t.tanggal.isBetweenValues(start, end))).watch();
-  }
-
-  Future<void> simpanKasbonHarian(int karyawanId, DateTime tgl, int nominal, String ket) async {
-    final start = DateTime(tgl.year, tgl.month, tgl.day);
-    await into(kasbonHarian).insert(
-      KasbonHarianCompanion.insert(
-        karyawanId: karyawanId,
-        tanggal: start,
-        nominal: Value(nominal),
-        keterangan: Value(ket),
-      ),
-    );
-  }
-
-  Stream<List<KasbonHarianData>> watchKasbonHariIni(DateTime tgl) {
-    final start = DateTime(tgl.year, tgl.month, tgl.day);
-    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59);
-    return (select(kasbonHarian)..where((t) => t.tanggal.isBetweenValues(start, end))).watch();
+    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
+    return (select(bintangHarian)
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+        .watch();
   }
 
   Stream<LaporanHarianData?> watchLaporanHari(DateTime tgl) {
-    final start = DateTime(tgl.year, tgl.month, tgl.day);
-    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59);
-    return (select(laporanHarian)..where((t) => t.tanggal.isBetweenValues(start, end))).watchSingleOrNull();
+    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
+    return (select(laporanHarian)
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+        .watchSingleOrNull();
   }
 
   Future<int> hitungGajiHariIni(DateTime tgl) async {
-    final start = DateTime(tgl.year, tgl.month, tgl.day);
-    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59);
+    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
 
-    final absensiList = await (select(absensi)..where((t) => t.jamMasuk.isBetweenValues(start, end))).get();
+    final absensiList = await (select(absensi)
+          ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
+          ..where((t) => t.jamMasuk.isSmallerOrEqualValue(end)))
+        .get();
     int totalGaji = 0;
 
     for (var abs in absensiList) {
@@ -243,7 +235,7 @@ class AppDatabase extends _$AppDatabase {
       if (kar != null) {
         final kat = await (select(kategoriKaryawan)..where((t) => t.id.equals(kar.kategoriId))).getSingleOrNull();
         if (kat != null) {
-          double pengali = abs.tipeKerja == 'HALF' || abs.tipeKerja == 'SETENGAH' ? 0.5 : 1.0;
+          double pengali = (abs.tipeKerja == 'HALF' || abs.tipeKerja == 'SETENGAH') ? 0.5 : 1.0;
           totalGaji += (kat.tarifPerHari * pengali).round();
         }
       }
@@ -268,7 +260,7 @@ class AppDatabase extends _$AppDatabase {
     required int kasHariIni,
     required int totalPiutangAkhir,
   }) async {
-    final start = DateTime(tgl.year, tgl.month, tgl.day);
+    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     await into(laporanHarian).insertOnConflictUpdate(
       LaporanHarianCompanion(
         tanggal: Value(start),
