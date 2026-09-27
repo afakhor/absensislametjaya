@@ -133,7 +133,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase._internal() : super(driftDatabase(name: 'tb_slamet_jaya_v8_clean'));
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9; // 1. Naikkan schemaVersion dari 8 ke 9
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -165,6 +165,10 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(laporanHarian, laporanHarian.saldoPiutangKemarin);
             await m.addColumn(laporanHarian, laporanHarian.kasHariIni);
             await m.addColumn(laporanHarian, laporanHarian.totalPiutangAkhir);
+          }
+          // 2. Tambahkan migrasi untuk versi 9 di sini:
+          if (from < 9) {
+            await m.createTable(kasbonHarian);
           }
         },
       );
