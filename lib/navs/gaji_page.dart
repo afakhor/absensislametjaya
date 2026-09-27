@@ -7,8 +7,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../dbases/localdatabase.dart';
-import '../dbases/gaji_db.dart';
+import 'localdatabase.dart';
+import 'gaji_db.dart';
 
 class GajiPage extends StatefulWidget {
   const GajiPage({super.key});
@@ -22,9 +22,8 @@ class _GajiPageState extends State<GajiPage> {
   final fmt = NumberFormat("#,###", "id_ID");
 
   DateTime _bulan = DateTime.now();
-  List<int> _selectedKaryawanIds = [];
-
-  List<String> _selectedStatusColors = [];
+  final List<int> _selectedKaryawanIds = [];
+  final List<String> _selectedStatusColors = [];
   bool _filterHanyaKasbon = false;
 
   DateTimeRange? _selectedDateRange;
@@ -77,7 +76,7 @@ class _GajiPageState extends State<GajiPage> {
     }
   }
 
-  // --- FUNGSI GENERATE PDF SLIP GAJI ---
+  // --- GENERATE PDF SLIP GAJI ---
   Future<pw.Document> _generatePdfSlipGaji({
     required String namaKaryawan,
     required String periode,
@@ -90,7 +89,7 @@ class _GajiPageState extends State<GajiPage> {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80, // Format ukuran struk thermal 80mm
+        pageFormat: PdfPageFormat.roll80,
         margin: const pw.EdgeInsets.all(12),
         build: (pw.Context context) {
           return pw.Column(
@@ -118,7 +117,6 @@ class _GajiPageState extends State<GajiPage> {
               pw.Divider(thickness: 0.8),
               pw.SizedBox(height: 4),
 
-              // Info Karyawan
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -138,7 +136,6 @@ class _GajiPageState extends State<GajiPage> {
               pw.Divider(thickness: 0.8),
               pw.SizedBox(height: 4),
 
-              // Rincian Gaji Realtime
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -166,7 +163,6 @@ class _GajiPageState extends State<GajiPage> {
               pw.Divider(thickness: 0.8),
               pw.SizedBox(height: 4),
 
-              // Total & Tanggal
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -184,7 +180,6 @@ class _GajiPageState extends State<GajiPage> {
               ),
               pw.SizedBox(height: 16),
 
-              // Tanda Tangan Owner
               pw.Align(
                 alignment: pw.Alignment.centerRight,
                 child: pw.Column(
@@ -205,7 +200,6 @@ class _GajiPageState extends State<GajiPage> {
     return pdf;
   }
 
-  // --- FUNGSI SHARE SLIP GAJI KE WHATSAPP ---
   Future<void> _shareSlipGajiWhatsApp({
     required String namaKaryawan,
     required String periode,
@@ -229,14 +223,12 @@ class _GajiPageState extends State<GajiPage> {
     final file = File(filePath);
     await file.writeAsBytes(bytes);
 
-    // Kirim File PDF via Share Sheet (bisa pilih WhatsApp)
     await Share.shareXFiles(
       [XFile(filePath)],
       text: "*SLIP GAJI TB. SLAMET JAYA*\nNama: $namaKaryawan\nPeriode: $periode\nTotal Diterima: Rp ${fmt.format(totalTerima)}",
     );
   }
 
-  // --- FUNGSI PRINT STRUK THERMAL ---
   Future<void> _printSlipGajiStruk({
     required String namaKaryawan,
     required String periode,
@@ -635,7 +627,14 @@ class _GajiPageState extends State<GajiPage> {
                       itemCount: filtered.length,
                       itemBuilder: (_, i) {
                         final g = filtered[i];
-                        final kar = listKar.where((k) => k.id == g.karyawanId).firstOrNull;
+                        
+                        KaryawanData? kar;
+                        try {
+                          kar = listKar.firstWhere((k) => k.id == g.karyawanId);
+                        } catch (_) {
+                          kar = null;
+                        }
+
                         final colorStatus = _getWarnaStatus(g.statusBayar);
                         final namaKaryawan = kar?.nama ?? "Karyawan ID: ${g.karyawanId}";
                         final strPeriode = "${DateFormat('dd/MM').format(g.mingguMulai)} - ${DateFormat('dd/MM/yy').format(g.mingguSelesai)}";
@@ -694,7 +693,7 @@ class _GajiPageState extends State<GajiPage> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: colorStatus.withOpacity(0.15),
+                                        color: colorStatus.withAlpha(38),
                                         borderRadius: BorderRadius.circular(4),
                                         border: Border.all(color: colorStatus, width: 0.8),
                                       ),
@@ -772,7 +771,6 @@ class _GajiPageState extends State<GajiPage> {
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            // TOMBOL PRINT & SHARE WHATSAPP
                                             Row(
                                               children: [
                                                 IconButton(
