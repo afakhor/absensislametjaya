@@ -31,27 +31,39 @@ class _DashboardPageState extends State<DashboardPage> {
   DateTime logSelesai = DateTime.now();
   Map<DateTime, List<AbsensiData>> absenPerTanggal = {};
   List<KaryawanData> allKaryawan = [];
-  
-  // Flag agar auto-fill nilai log lama hanya terjadi 1x saat inisialisasi awal hari
-  bool _isLogLoadedForToday = false;
+
+  // Menyimpan tanggal terakhir log di-load untuk mendeteksi pergantian hari otomatis
+  DateTime? _lastLoadedDate;
 
   @override
   void initState() {
     super.initState();
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
-        final previousDay = DateTime(nowLive.year, nowLive.month, nowLive.day);
         final currentNow = DateTime.now();
         final currentDay = DateTime(currentNow.year, currentNow.month, currentNow.day);
-        
-        // Reset flag jika hari sudah berganti (melewati tengah malam)
+        final previousDay = DateTime(nowLive.year, nowLive.month, nowLive.day);
+
+        // Jika hari berganti (melewati pukul 00:00)
         if (!previousDay.isAtSameMomentAs(currentDay)) {
-          _isLogLoadedForToday = false;
+          _lastLoadedDate = null; // Reset tracker agar log hari baru di-load otomatis
+          _resetControllers();
         }
         setState(() => nowLive = currentNow);
       }
     });
     _loadBulan();
+  }
+
+  void _resetControllers() {
+    omsetC.text = "0";
+    cashC.text = "0";
+    pendingC.text = "0";
+    pemLainC.text = "0";
+    marginC.text = "10";
+    bebanOpsC.text = "0";
+    kasbonC.text = "0";
+    bebanLainC.text = "0";
   }
 
   @override
@@ -336,8 +348,10 @@ class _DashboardPageState extends State<DashboardPage> {
                           stream: db.watchLaporanHari(today),
                           builder: (c, lapSnap) {
                             final lap = lapSnap.data;
-                            if (lap != null && !_isLogLoadedForToday) {
-                              _isLogLoadedForToday = true;
+                            
+                            // Load data eksisting hanya 1x jika belum pernah di-load untuk hari ini
+                            if (lap != null && (_lastLoadedDate == null || !_lastLoadedDate!.isAtSameMomentAs(startOfToday))) {
+                              _lastLoadedDate = startOfToday;
                               omsetC.text = lap.totalPenjualan.toString();
                               cashC.text = lap.cash.toString();
                               pendingC.text = lap.piutangBaru.toString();
@@ -423,7 +437,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                                     foregroundColor: Colors.white,
                                                   ),
                                                   onPressed: () async {
-                                                    // FIX BANYAK TEKAN: Netralkan jam, menit, detik ke awal hari
+                                                    // FIX 1: Selalu gunakan tanggal ter-normalisasi (00:00:00)
                                                     final todayNormalized = DateTime(nowLive.year, nowLive.month, nowLive.day);
 
                                                     await db.simpanLaporanHarianFull(
@@ -443,7 +457,10 @@ class _DashboardPageState extends State<DashboardPage> {
                                                       kasHariIni: kasHariIni,
                                                       totalPiutangAkhir: pending + bebanLain,
                                                     );
-                                                    _loadBulan();
+                                                    
+                                                    // FIX 2: Refresh data kalender & log secara instan
+                                                    await _loadBulan();
+                                                    
                                                     if (context.mounted) {
                                                       ScaffoldMessenger.of(context).showSnackBar(
                                                         SnackBar(
