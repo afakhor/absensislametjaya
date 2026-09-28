@@ -225,7 +225,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                         const SizedBox(height: 12),
 
-                        Card(
+                                                Card(
                           elevation: 2,
                           child: Padding(
                             padding: const EdgeInsets.all(12),
@@ -237,20 +237,28 @@ class _DashboardPageState extends State<DashboardPage> {
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 const Divider(),
-                                if (full.isNotEmpty)...[
-                                  const Text("✅ FULL (1 Hari):", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                                 ...full.map((a) {
-                                    final kar = allKar.where((k) => k.id == a.karyawanId).firstOrNull;
-                                    final namaKar = kar?.nama?? "ID:${a.karyawanId}";
-                                    final kasbonKar = mapKasbon[a.karyawanId]?? 0;
+                                // FIX: Gabung jadi 1 list, tiap ID punya checklist FULL | ½ HARI + input KASBON
+                                ...absHariIni.map((a) {
+                                  final kar = allKar.where((k) => k.id == a.karyawanId).firstOrNull;
+                                  final namaKar = kar?.nama ?? "ID:${a.karyawanId}";
+                                  final kasbonKar = mapKasbon[a.karyawanId] ?? 0;
+                                  final tipe = a.tipeKerja.toUpperCase().trim();
+                                  final isFull = tipe == 'FULL' || tipe == 'FULL_DAY';
+                                  final isHalf = !isFull;
 
-                                    return ListTile(
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: isFull ? Colors.green.shade50 : Colors.orange.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: ListTile(
                                       dense: true,
                                       title: Row(
                                         children: [
-                                          Text(namaKar),
-                                          if (kasbonKar > 0)...[
-                                            const SizedBox(width: 8),
+                                          Expanded(child: Text(namaKar, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                          if (kasbonKar > 0)
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                               decoration: BoxDecoration(
@@ -258,104 +266,61 @@ class _DashboardPageState extends State<DashboardPage> {
                                                 borderRadius: BorderRadius.circular(4),
                                               ),
                                               child: Text(
-                                                "Kasbon: Rp ${fmt.format(kasbonKar)}",
+                                                "Rp ${fmt.format(kasbonKar)}",
                                                 style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold),
                                               ),
                                             ),
-                                          ]
                                         ],
                                       ),
-                                      // INI YANG DILINGKARI MERAH - per ID karyawan
-                                      trailing: PopupMenuButton<String>(
-                                        onSelected: (v) async {
-                                          if (v == 'KASBON') {
-                                            _dialogInputKasbon(context, a.karyawanId, namaKar, today);
-                                          } else {
-                                            await db.updateTipeAbsen(a.id, v);
-                                            await _loadBulan();
-                                            if (mounted) setState(() {});
-                                          }
-                                        },
-                                        itemBuilder: (_) => [
-                                          const PopupMenuItem(value: 'HALF', child: Text("Ubah ke ½ Hari")),
-                                          const PopupMenuItem(value: 'FULL', child: Text("Tetap Full")),
-                                          const PopupMenuItem(
-                                            value: 'KASBON',
-                                            child: Row(
-                                              children: [
-                                                Icon(Icons.money_off, color: Colors.red, size: 18),
-                                                SizedBox(width: 8),
-                                                Text("Input Kasbon Karyawan"),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }),
-                                ],
-                                if (setengah.isNotEmpty)...[
-                                  const SizedBox(height: 8),
-                                  const Text("🟡 ½ HARI:", style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-                                 ...setengah.map((a) {
-                                    final kar = allKar.where((k) => k.id == a.karyawanId).firstOrNull;
-                                    final namaKar = kar?.nama?? "ID:${a.karyawanId}";
-                                    final kasbonKar = mapKasbon[a.karyawanId]?? 0;
-                                    return ListTile(
-                                      dense: true,
-                                      title: Row(
+                                      // INI PENGGANTI TITIK 3 BIRU
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Text(namaKar),
-                                          if (kasbonKar > 0)...[
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: Colors.red.shade100,
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                "Kasbon: Rp ${fmt.format(kasbonKar)}",
-                                                style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold),
-                                              ),
-                                            ),
-                                          ]
-                                        ],
-                                      ),
-                                      trailing: PopupMenuButton<String>(
-                                        onSelected: (v) async {
-                                          if (v == 'KASBON') {
-                                            _dialogInputKasbon(context, a.karyawanId, namaKar, today);
-                                          } else {
-                                            await db.updateTipeAbsen(a.id, v);
-                                            await _loadBulan();
-                                            if (mounted) setState(() {});
-                                          }
-                                        },
-                                        itemBuilder: (_) => [
-                                          const PopupMenuItem(value: 'FULL', child: Text("Ubah ke Full")),
-                                          const PopupMenuItem(value: 'HALF', child: Text("Tetap ½ Hari")),
-                                          const PopupMenuItem(
-                                            value: 'KASBON',
-                                            child: Row(
-                                              children: [
-                                                Icon(Icons.money_off, color: Colors.red, size: 18),
-                                                SizedBox(width: 8),
-                                                Text("Input Kasbon Karyawan"),
-                                              ],
-                                            ),
+                                          // CHECKLIST SALAH SATU - ½ HARI | FULLDAY
+                                          ChoiceChip(
+                                            label: const Text("Full", style: TextStyle(fontSize: 11)),
+                                            selected: isFull,
+                                            onSelected: (v) async {
+                                              await db.updateTipeAbsen(a.id, 'FULL');
+                                              await _loadBulan();
+                                              if (mounted) setState(() {});
+                                            },
+                                            visualDensity: VisualDensity.compact,
+                                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          ChoiceChip(
+                                            label: const Text("½ Hari", style: TextStyle(fontSize: 11)),
+                                            selected: isHalf,
+                                            onSelected: (v) async {
+                                              await db.updateTipeAbsen(a.id, 'HALF');
+                                              await _loadBulan();
+                                              if (mounted) setState(() {});
+                                            },
+                                            visualDensity: VisualDensity.compact,
+                                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          // KASBON = INPUTAN
+                                          IconButton(
+                                            icon: const Icon(Icons.money_off, size: 18, color: Colors.red),
+                                            tooltip: "Input Kasbon",
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            onPressed: () => _dialogInputKasbon(context, a.karyawanId, namaKar, today),
                                           ),
                                         ],
                                       ),
-                                    );
-                                  }),
-                                ],
+                                    ),
+                                  );
+                                }),
+                                if (absHariIni.isEmpty)
+                                  const Text("Belum ada yang hadir", style: TextStyle(fontSize: 12, color: Colors.grey)),
                               ],
                             ),
                           ),
                         ),
                         const SizedBox(height: 12),
-
                         Card(
                           color: Colors.amber.shade50,
                           elevation: 2,
