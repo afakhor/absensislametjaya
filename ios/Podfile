@@ -1,5 +1,5 @@
 # Podfile fix TB Slamet Jaya
-platform :ios, '15.0'
+platform :ios, '26.0'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -34,10 +34,20 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
-      # Fix ampuh: paksa semua pod ikut 15.0
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      # Set Target Deployment ke iOS 26.0 untuk semua dependency/pod
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '26.0'
       config.build_settings['ENABLE_BITCODE'] = 'NO'
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64 i386'
+      
+      # Penulisan sintaks Macro Array Ruby yang benar (tanpa koma antar elemen string)
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_CAMERA=1',
+        'PERMISSION_PHOTOS=1',
+        'PERMISSION_BLUETOOTH=1',
+        'PERMISSION_LOCATION=1'
+      ]
+
       # Fix flutter_blue_plus
       if target.name == 'flutter_blue_plus'
         config.build_settings['SWIFT_VERSION'] = '5.0'
