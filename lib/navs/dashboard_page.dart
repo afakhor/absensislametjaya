@@ -32,8 +32,8 @@ class _DashboardPageState extends State<DashboardPage> {
   Map<DateTime, List<AbsensiData>> absenPerTanggal = {};
   List<KaryawanData> allKaryawan = [];
 
-  // Menyimpan tanggal terakhir log di-load untuk mendeteksi pergantian hari otomatis
-  DateTime? _lastLoadedDate;
+  // Menandai tanggal mana yang controller-nya sudah pernah diisi dari DB
+  String _loadedDateKey = "";
 
   @override
   void initState() {
@@ -41,13 +41,12 @@ class _DashboardPageState extends State<DashboardPage> {
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
         final currentNow = DateTime.now();
-        final currentDay = DateTime(currentNow.year, currentNow.month, currentNow.day);
-        final previousDay = DateTime(nowLive.year, nowLive.month, nowLive.day);
+        final currentKey = DateFormat('yyyy-MM-dd').format(currentNow);
 
         // Jika hari berganti (melewati pukul 00:00)
-        if (!previousDay.isAtSameMomentAs(currentDay)) {
-          _lastLoadedDate = null; // Reset tracker agar log hari baru di-load otomatis
-          _resetControllers();
+        if (_loadedDateKey.isNotEmpty && _loadedDateKey != currentKey) {
+          _loadedDateKey = ""; // Reset kuncian
+          _resetControllers(); // Reset input ke "0" untuk hari baru
         }
         setState(() => nowLive = currentNow);
       }
@@ -151,6 +150,7 @@ class _DashboardPageState extends State<DashboardPage> {
               await db.simpanKasbonHarian(karyawanId, DateTime.now(), val, "Kasbon via Live Dashboard");
               if (ctx.mounted) {
                 Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text("Kasbon $nama sebesar Rp ${fmt.format(val)} berhasil dicatat")),
                 );
@@ -166,6 +166,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _liveTab() {
     final today = DateTime.now();
     final startOfToday = DateTime(today.year, today.month, today.day);
+    final todayKeyStr = DateFormat('yyyy-MM-dd').format(startOfToday);
 
     return StreamBuilder<List<AbsensiData>>(
       stream: (db.select(db.absensi)
@@ -260,7 +261,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                             _dialogInputKasbon(context, a.karyawanId, namaKar);
                                           } else {
                                             await db.updateTipeAbsen(a.id, v);
-                                            _loadBulan();
+                                            await _loadBulan();
+                                            setState(() {});
                                           }
                                         },
                                         itemBuilder: (_) => [
@@ -297,11 +299,16 @@ class _DashboardPageState extends State<DashboardPage> {
                                             _dialogInputKasbon(context, a.karyawanId, namaKar);
                                           } else {
                                             await db.updateTipeAbsen(a.id, v);
-                                            _loadBulan();
+                                            await _loadBulan();
+                                            setState(() {});
                                           }
                                         },
                                         itemBuilder: (_) => [
                                           const PopupMenuItem(value: 'FULL', child: Text("Ubah ke Full")),
+                                          const PopupMenuItem(
+                                            value: 'HALF',
+                                            child: Text("Tetap ½ Hari"),
+                                          ),
                                           const PopupMenuItem(
                                             value: 'KASBON',
                                             child: Row(
@@ -348,10 +355,10 @@ class _DashboardPageState extends State<DashboardPage> {
                           stream: db.watchLaporanHari(today),
                           builder: (c, lapSnap) {
                             final lap = lapSnap.data;
-                            
-                            // Load data eksisting hanya 1x jika belum pernah di-load untuk hari ini
-                            if (lap != null && (_lastLoadedDate == null || !_lastLoadedDate!.isAtSameMomentAs(startOfToday))) {
-                              _lastLoadedDate = startOfToday;
+
+                            // Isi controller dari DB HANYA SEKALI per hari saat dibuka pertama kali
+                            if (lap != null && _loadedDateKey != todayKeyStr) {
+                              _loadedDateKey = todayKeyStr;
                               omsetC.text = lap.totalPenjualan.toString();
                               cashC.text = lap.cash.toString();
                               pendingC.text = lap.piutangBaru.toString();
@@ -359,6 +366,8 @@ class _DashboardPageState extends State<DashboardPage> {
                               bebanOpsC.text = lap.bebanOperasional.toString();
                               kasbonC.text = lap.kasbonKaryawan.toString();
                               bebanLainC.text = lap.saldoPiutangKemarin.toString();
+                            } else if (lap == null && _loadedDateKey != todayKeyStr) {
+                              _loadedDateKey = todayKeyStr;
                             }
 
                             return Card(
@@ -437,7 +446,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                                     foregroundColor: Colors.white,
                                                   ),
                                                   onPressed: () async {
-                                                    // FIX 1: Selalu gunakan tanggal ter-normalisasi (00:00:00)
+                                                    // FIX UPSERT BANYAK TEKAN: Pukul 00:00:00 persis
                                                     final todayNormalized = DateTime(nowLive.year, nowLive.month, nowLive.day);
 
                                                     await db.simpanLaporanHarianFull(
@@ -457,11 +466,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                                       kasHariIni: kasHariIni,
                                                       totalPiutangAkhir: pending + bebanLain,
                                                     );
-                                                    
-                                                    // FIX 2: Refresh data kalender & log secara instan
+
+                                                    // Refresh data kalender & UI
                                                     await _loadBulan();
-                                                    
+
                                                     if (context.mounted) {
+                                                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
                                                       ScaffoldMessenger.of(context).showSnackBar(
                                                         SnackBar(
                                                           content: Text(
