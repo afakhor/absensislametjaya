@@ -31,12 +31,25 @@ class _DashboardPageState extends State<DashboardPage> {
   DateTime logSelesai = DateTime.now();
   Map<DateTime, List<AbsensiData>> absenPerTanggal = {};
   List<KaryawanData> allKaryawan = [];
+  
+  // Flag agar auto-fill nilai log lama hanya terjadi 1x saat inisialisasi awal hari
+  bool _isLogLoadedForToday = false;
 
   @override
   void initState() {
     super.initState();
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => nowLive = DateTime.now());
+      if (mounted) {
+        final previousDay = DateTime(nowLive.year, nowLive.month, nowLive.day);
+        final currentNow = DateTime.now();
+        final currentDay = DateTime(currentNow.year, currentNow.month, currentNow.day);
+        
+        // Reset flag jika hari sudah berganti (melewati tengah malam)
+        if (!previousDay.isAtSameMomentAs(currentDay)) {
+          _isLogLoadedForToday = false;
+        }
+        setState(() => nowLive = currentNow);
+      }
     });
     _loadBulan();
   }
@@ -127,7 +140,7 @@ class _DashboardPageState extends State<DashboardPage> {
               if (ctx.mounted) {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Kasbon $nama sebesar Rp $val berhasil dicatat")),
+                  SnackBar(content: Text("Kasbon $nama sebesar Rp ${fmt.format(val)} berhasil dicatat")),
                 );
               }
             },
@@ -140,9 +153,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _liveTab() {
     final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+
     return StreamBuilder<List<AbsensiData>>(
       stream: (db.select(db.absensi)
-            ..where((t) => t.jamMasuk.isBiggerOrEqualValue(DateTime(today.year, today.month, today.day)))
+            ..where((t) => t.jamMasuk.isBiggerOrEqualValue(startOfToday))
             ..where((t) => t.jamMasuk.isSmallerOrEqualValue(DateTime(today.year, today.month, today.day, 23, 59, 59))))
           .watch(),
       builder: (c, absSnap) {
@@ -321,7 +336,8 @@ class _DashboardPageState extends State<DashboardPage> {
                           stream: db.watchLaporanHari(today),
                           builder: (c, lapSnap) {
                             final lap = lapSnap.data;
-                            if (lap != null && omsetC.text == "0" && lap.totalPenjualan > 0) {
+                            if (lap != null && !_isLogLoadedForToday) {
+                              _isLogLoadedForToday = true;
                               omsetC.text = lap.totalPenjualan.toString();
                               cashC.text = lap.cash.toString();
                               pendingC.text = lap.piutangBaru.toString();
@@ -407,8 +423,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                                     foregroundColor: Colors.white,
                                                   ),
                                                   onPressed: () async {
+                                                    // FIX BANYAK TEKAN: Netralkan jam, menit, detik ke awal hari
+                                                    final todayNormalized = DateTime(nowLive.year, nowLive.month, nowLive.day);
+
                                                     await db.simpanLaporanHarianFull(
-                                                      tgl: today,
+                                                      tgl: todayNormalized,
                                                       omset: omset,
                                                       cash: cash,
                                                       piutangBaru: pending,
@@ -427,7 +446,13 @@ class _DashboardPageState extends State<DashboardPage> {
                                                     _loadBulan();
                                                     if (context.mounted) {
                                                       ScaffoldMessenger.of(context).showSnackBar(
-                                                        const SnackBar(content: Text("Log Live Berhasil Disimpan")),
+                                                        SnackBar(
+                                                          content: Text(
+                                                            "Log Live ${DateFormat('dd MMM yyyy').format(todayNormalized)} berhasil diperbarui!",
+                                                          ),
+                                                          backgroundColor: Colors.green.shade800,
+                                                          duration: const Duration(seconds: 2),
+                                                        ),
                                                       );
                                                     }
                                                   },
