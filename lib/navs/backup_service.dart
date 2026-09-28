@@ -4,27 +4,46 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 class BackupService {
-  // 1. UPLOAD / EXPORT / BACKUP DATA TO .bskro
+  // Helper untuk mendapatkan path DB sqlite Drift yang presisi
+  static Future<File?> _getDatabaseFile() async {
+    final dbFolder = await getApplicationDocumentsDirectory();
+    
+    // Cek path dengan ekstensi .sqlite (standar drift_flutter)
+    final pathWithExt = p.join(dbFolder.path, 'tb_slamet_jaya_v8_clean.sqlite');
+    final fileWithExt = File(pathWithExt);
+    if (await fileWithExt.exists()) return fileWithExt;
+
+    // Fallback cek path tanpa ekstensi
+    final pathNoExt = p.join(dbFolder.path, 'tb_slamet_jaya_v8_clean');
+    final fileNoExt = File(pathNoExt);
+    if (await fileNoExt.exists()) return fileNoExt;
+
+    return null;
+  }
+
+  // 1. EXPORT / BACKUP DATA TO .bskro
   static Future<String?> exportBackup() async {
     try {
-      final dbFolder = await getApplicationDocumentsDirectory();
-      final dbPath = p.join(dbFolder.path, 'tb_slamet_jaya_v8_clean'); // Nama file DB Drift Anda
-      final dbFile = File(dbPath);
-
-      if (!await dbFile.exists()) {
-        throw Exception("File database tidak ditemukan.");
+      final dbFile = await _getDatabaseFile();
+      if (dbFile == null) {
+        throw Exception("File database tidak ditemukan di direktori lokal.");
       }
 
-      // Buat nama file backup dengan timestamp dan ekstensi .bskro
       final dateStr = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
       final backupFileName = 'backup_slamet_jaya_$dateStr.bskro';
 
-      // Simpan ke folder dokumen/penyimpanan eksternal
-      final targetDir = await getExternalStorageDirectory();
-      final backupPath = p.join(targetDir!.path, backupFileName);
+      // Menggunakan folder Downloads atau External Storage Publik
+      Directory? targetDir = await getDownloadsDirectory();
+      targetDir ??= await getExternalStorageDirectory();
 
+      if (targetDir == null) {
+        throw Exception("Direktori penyimpanan tidak tersedia.");
+      }
+
+      final backupPath = p.join(targetDir.path, backupFileName);
       await dbFile.copy(backupPath);
-      return backupPath; // Mengembalikan lokasi file .bskro yang berhasil dibuat
+      
+      return backupPath;
     } catch (e) {
       print("Gagal backup: $e");
       return null;
@@ -34,23 +53,27 @@ class BackupService {
   // 2. IMPORT / RESTORE DATA FROM .bskro
   static Future<bool> importBackup() async {
     try {
-      // Buka file picker khusus ekstensi bskro
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['bskro'],
+        type: FileType.any, // Mencegah filter ekstensi diblokir oleh OS Android tertentu
       );
 
       if (result != null && result.files.single.path != null) {
         final selectedFilePath = result.files.single.path!;
-        final selectedFile = File(selectedFilePath);
-
-        final dbFolder = await getApplicationDocumentsDirectory();
-        final dbPath = p.join(dbFolder.path, 'tb_slamet_jaya_v8_clean');
-
-        // Timpa file database lama dengan file .bskro
-        await selectedFile.copy(dbPath);
         
-        return true; // Berhasil di-restore
+        // Validasi ekstensi secara manual
+        if (!selectedFilePath.endsWith('.bskro') && !selectedFilePath.endsWith('.sqlite')) {
+          print("Format file salah. Harus ber-ekstensi .bskro");
+          return false;
+        }
+
+        final selectedFile = File(selectedFilePath);
+        final dbFolder = await getApplicationDocumentsDirectory();
+        
+        // Target lokasi overwrite DB Drift
+        final targetPath = p.join(dbFolder.path, 'tb_slamet_jaya_v8_clean.sqlite');
+        
+        await selectedFile.copy(targetPath);
+        return true;
       }
       return false;
     } catch (e) {
