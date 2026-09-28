@@ -184,8 +184,11 @@ class AppDatabase extends _$AppDatabase {
   // --- HELPER METHODS DASHBOARD ---
 
   Future<void> updateTipeAbsen(int idAbsensi, String tipe) async {
-    await (update(absensi)..where((t) => t.id.equals(idAbsensi)))
-        .write(AbsensiCompanion(tipeKerja: Value(tipe)));
+    await (update(absensi)..where((t) => t.id.equals(idAbsensi))).write(
+      AbsensiCompanion(
+        tipeKerja: Value(tipe.toUpperCase().trim()),
+      ),
+    );
   }
 
   Future<void> setBintang(int karyawanId, DateTime tgl, int rating) async {
@@ -238,23 +241,26 @@ class AppDatabase extends _$AppDatabase {
           ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
           ..where((t) => t.jamMasuk.isSmallerOrEqualValue(end)))
         .get();
+
+    // Map Kategori untuk mendapatkan tarif per hari
+    final listKategori = await select(kategoriKaryawan).get();
+    final mapKategori = {for (var k in listKategori) k.id: k.tarifPerHari};
+
+    // Map Karyawan untuk mendapatkan kategoriId
+    final listKaryawan = await select(karyawan).get();
+    final mapKaryawan = {for (var k in listKaryawan) k.id: k.kategoriId};
+
     int totalGaji = 0;
 
     for (var abs in absensiList) {
-      final kar = await (select(karyawan)
-            ..where((t) => t.id.equals(abs.karyawanId)))
-          .getSingleOrNull();
-      if (kar != null) {
-        final kat = await (select(kategoriKaryawan)
-              ..where((t) => t.id.equals(kar.kategoriId)))
-            .getSingleOrNull();
-        if (kat != null) {
-          double pengali =
-              (abs.tipeKerja == 'HALF' || abs.tipeKerja == 'SETENGAH')
-                  ? 0.5
-                  : 1.0;
-          totalGaji += (kat.tarifPerHari * pengali).round();
-        }
+      final katId = mapKaryawan[abs.karyawanId];
+      final tarif = mapKategori[katId] ?? 0;
+
+      final tipe = abs.tipeKerja.toUpperCase().trim();
+      if (tipe == 'HALF' || tipe == 'HALF_DAY' || tipe == 'SETENGAH' || tipe == '½ HARI') {
+        totalGaji += (tarif / 2).round();
+      } else {
+        totalGaji += tarif;
       }
     }
     return totalGaji;
