@@ -42,8 +42,8 @@ class _DashboardPageState extends State<DashboardPage> {
         final currentNow = DateTime.now();
         final currentKey = DateFormat('yyyy-MM-dd').format(currentNow);
 
-        // Jika jam melewati 00:00 (berganti hari), reset kuncian dan form
-        if (_loadedDateKey.isNotEmpty && _loadedDateKey != currentKey) {
+        // FIX: Jika ganti hari (lewat 00:00), reset form & kunci loader
+        if (_loadedDateKey.isNotEmpty && _loadedDateKey!= currentKey) {
           _loadedDateKey = "";
           _resetControllers();
         }
@@ -84,10 +84,10 @@ class _DashboardPageState extends State<DashboardPage> {
     final last = DateTime(bulan.year, bulan.month + 1, 0, 23, 59, 59);
     final allAbsen = await db.select(db.absensi).get();
     final filtered = allAbsen
-        .where((a) =>
+       .where((a) =>
             a.jamMasuk.isAfter(first.subtract(const Duration(seconds: 1))) &&
             a.jamMasuk.isBefore(last.add(const Duration(seconds: 1))))
-        .toList();
+       .toList();
 
     Map<DateTime, List<AbsensiData>> map = {};
     for (var a in filtered) {
@@ -103,21 +103,21 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  int _parse(String s) => int.tryParse(s.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+  int _parse(String s) => int.tryParse(s.replaceAll(RegExp(r'[^0-9]'), ''))?? 0;
 
-  Widget _bintangWidget(int karyawanId, int bintangSaatIni) {
+  Widget _bintangWidget(int karyawanId, int bintangSaatIni, DateTime tglRef) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (i) {
         final idx = i + 1;
         return InkWell(
           onTap: () async {
-            await db.setBintang(karyawanId, DateTime.now(), idx);
+            await db.setBintang(karyawanId, tglRef, idx);
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2.0),
             child: Icon(
-              idx <= bintangSaatIni ? Icons.star : Icons.star_border,
+              idx <= bintangSaatIni? Icons.star : Icons.star_border,
               size: 24,
               color: Colors.amber.shade700,
             ),
@@ -127,7 +127,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _dialogInputKasbon(BuildContext context, int karyawanId, String nama) {
+  void _dialogInputKasbon(BuildContext context, int karyawanId, String nama, DateTime tglRef) {
     final txtC = TextEditingController();
     showDialog(
       context: context,
@@ -145,8 +145,9 @@ class _DashboardPageState extends State<DashboardPage> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Batal")),
           ElevatedButton(
             onPressed: () async {
-              final val = int.tryParse(txtC.text) ?? 0;
-              await db.simpanKasbonHarian(karyawanId, DateTime.now(), val, "Kasbon via Live Dashboard");
+              final val = int.tryParse(txtC.text)?? 0;
+              // FIX: pakai tglRef (nowLive) biar per ID per TANGGAL
+              await db.simpanKasbonHarian(karyawanId, tglRef, val, "Kasbon via Live Dashboard");
               if (ctx.mounted) {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -163,26 +164,28 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _liveTab() {
-    final today = DateTime.now();
+    // FIX UTAMA: pakai nowLive konsisten untuk semua query hari ini
+    final today = nowLive;
     final startOfToday = DateTime(today.year, today.month, today.day);
+    final endOfToday = DateTime(today.year, today.month, today.day, 23, 59, 59, 999);
     final todayKeyStr = DateFormat('yyyy-MM-dd').format(startOfToday);
 
     return StreamBuilder<List<AbsensiData>>(
       stream: (db.select(db.absensi)
-            ..where((t) => t.jamMasuk.isBiggerOrEqualValue(startOfToday))
-            ..where((t) => t.jamMasuk.isSmallerOrEqualValue(DateTime(today.year, today.month, today.day, 23, 59, 59))))
-          .watch(),
+           ..where((t) => t.jamMasuk.isBiggerOrEqualValue(startOfToday))
+           ..where((t) => t.jamMasuk.isSmallerOrEqualValue(endOfToday)))
+         .watch(),
       builder: (c, absSnap) {
-        final absHariIni = absSnap.data ?? [];
+        final absHariIni = absSnap.data?? [];
 
         return StreamBuilder<List<KaryawanData>>(
           stream: db.select(db.karyawan).watch(),
           builder: (c, karSnap) {
             if (!karSnap.hasData) return const Center(child: CircularProgressIndicator());
-            final allKar = karSnap.data ?? [];
+            final allKar = karSnap.data?? [];
 
             final idsMasuk = absHariIni.map((e) => e.karyawanId).toSet();
-            final bolong = allKar.where((k) => !idsMasuk.contains(k.id)).toList();
+            final bolong = allKar.where((k) =>!idsMasuk.contains(k.id)).toList();
 
             final full = absHariIni.where((a) {
               final t = a.tipeKerja.toUpperCase().trim();
@@ -197,12 +200,12 @@ class _DashboardPageState extends State<DashboardPage> {
             return StreamBuilder<List<BintangHarianData>>(
               stream: db.watchBintangHari(today),
               builder: (c, bintangSnap) {
-                final mapB = {for (var b in bintangSnap.data ?? []) b.karyawanId: b.bintang};
+                final mapB = {for (var b in bintangSnap.data?? []) b.karyawanId: b.bintang};
 
                 return StreamBuilder<List<KasbonHarianData>>(
                   stream: db.watchKasbonHariIni(today),
                   builder: (c, kasbonSnap) {
-                    final mapKasbon = {for (var k in kasbonSnap.data ?? []) k.karyawanId: k.nominal};
+                    final mapKasbon = {for (var k in kasbonSnap.data?? []) k.karyawanId: k.nominal};
 
                     return ListView(
                       padding: const EdgeInsets.all(12),
@@ -234,19 +237,19 @@ class _DashboardPageState extends State<DashboardPage> {
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 const Divider(),
-                                if (full.isNotEmpty) ...[
+                                if (full.isNotEmpty)...[
                                   const Text("✅ FULL (1 Hari):", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                                  ...full.map((a) {
+                                 ...full.map((a) {
                                     final kar = allKar.where((k) => k.id == a.karyawanId).firstOrNull;
-                                    final namaKar = kar?.nama ?? "ID:${a.karyawanId}";
-                                    final kasbonKar = mapKasbon[a.karyawanId] ?? 0;
+                                    final namaKar = kar?.nama?? "ID:${a.karyawanId}";
+                                    final kasbonKar = mapKasbon[a.karyawanId]?? 0;
 
                                     return ListTile(
                                       dense: true,
                                       title: Row(
                                         children: [
                                           Text(namaKar),
-                                          if (kasbonKar > 0) ...[
+                                          if (kasbonKar > 0)...[
                                             const SizedBox(width: 8),
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -262,10 +265,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                           ]
                                         ],
                                       ),
+                                      // INI YANG DILINGKARI MERAH - per ID karyawan
                                       trailing: PopupMenuButton<String>(
                                         onSelected: (v) async {
                                           if (v == 'KASBON') {
-                                            _dialogInputKasbon(context, a.karyawanId, namaKar);
+                                            _dialogInputKasbon(context, a.karyawanId, namaKar, today);
                                           } else {
                                             await db.updateTipeAbsen(a.id, v);
                                             await _loadBulan();
@@ -290,20 +294,38 @@ class _DashboardPageState extends State<DashboardPage> {
                                     );
                                   }),
                                 ],
-                                if (setengah.isNotEmpty) ...[
+                                if (setengah.isNotEmpty)...[
                                   const SizedBox(height: 8),
                                   const Text("🟡 ½ HARI:", style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-                                  ...setengah.map((a) {
+                                 ...setengah.map((a) {
                                     final kar = allKar.where((k) => k.id == a.karyawanId).firstOrNull;
-                                    final namaKar = kar?.nama ?? "ID:${a.karyawanId}";
-
+                                    final namaKar = kar?.nama?? "ID:${a.karyawanId}";
+                                    final kasbonKar = mapKasbon[a.karyawanId]?? 0;
                                     return ListTile(
                                       dense: true,
-                                      title: Text(namaKar),
+                                      title: Row(
+                                        children: [
+                                          Text(namaKar),
+                                          if (kasbonKar > 0)...[
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.red.shade100,
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                "Kasbon: Rp ${fmt.format(kasbonKar)}",
+                                                style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          ]
+                                        ],
+                                      ),
                                       trailing: PopupMenuButton<String>(
                                         onSelected: (v) async {
                                           if (v == 'KASBON') {
-                                            _dialogInputKasbon(context, a.karyawanId, namaKar);
+                                            _dialogInputKasbon(context, a.karyawanId, namaKar, today);
                                           } else {
                                             await db.updateTipeAbsen(a.id, v);
                                             await _loadBulan();
@@ -344,11 +366,11 @@ class _DashboardPageState extends State<DashboardPage> {
                               children: [
                                 const Text("⭐ RATING KARYAWAN HARI INI", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown)),
                                 const Divider(),
-                                ...allKar.map((k) => ListTile(
+                               ...allKar.map((k) => ListTile(
                                       dense: true,
                                       contentPadding: EdgeInsets.zero,
                                       title: Text(k.nama, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                      trailing: _bintangWidget(k.id, mapB[k.id] ?? 0),
+                                      trailing: _bintangWidget(k.id, mapB[k.id]?? 0, today),
                                     )),
                               ],
                             ),
@@ -361,7 +383,8 @@ class _DashboardPageState extends State<DashboardPage> {
                           builder: (c, lapSnap) {
                             final lap = lapSnap.data;
 
-                            if (lap != null && _loadedDateKey != todayKeyStr) {
+                            // FIX: Load sekali per tanggal, tapi tetap bisa diedit
+                            if (lap!= null && _loadedDateKey!= todayKeyStr) {
                               _loadedDateKey = todayKeyStr;
                               omsetC.text = lap.totalPenjualan.toString();
                               cashC.text = lap.cash.toString();
@@ -370,7 +393,8 @@ class _DashboardPageState extends State<DashboardPage> {
                               bebanOpsC.text = lap.bebanOperasional.toString();
                               kasbonC.text = lap.kasbonKaryawan.toString();
                               bebanLainC.text = lap.saldoPiutangKemarin.toString();
-                            } else if (lap == null && _loadedDateKey != todayKeyStr) {
+                            } else if (lap == null && _loadedDateKey!= todayKeyStr) {
+                              // Kalau belum ada laporan hari ini, kunci biar gak reload terus
                               _loadedDateKey = todayKeyStr;
                             }
 
@@ -386,25 +410,22 @@ class _DashboardPageState extends State<DashboardPage> {
                                     const Text("FORMAT HARIAN TB. SLAMET JAYA",
                                         style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
                                     const Divider(),
-
                                     const Text("1. Omset & Kas Masuk", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                     _buildField("Omset Hari Ini", omsetC),
                                     _buildField("Cash Hari Ini", cashC),
                                     _buildField("Cash / Pending", pendingC),
                                     _buildField("Pemasukan Lain", pemLainC),
-
                                     const SizedBox(height: 10),
                                     const Text("2. Parameter Margin & Beban", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                     _buildField("Margin (%)", marginC),
                                     _buildField("Beban Ops", bebanOpsC),
                                     _buildField("Kasbon Karyawan", kasbonC),
                                     _buildField("Beban Lain", bebanLainC),
-
                                     const SizedBox(height: 12),
                                     FutureBuilder<int>(
                                       future: db.hitungGajiHariIni(today),
                                       builder: (c, gajiSnap) {
-                                        final bebanGaji = gajiSnap.data ?? 0;
+                                        final bebanGaji = gajiSnap.data?? 0;
                                         final omset = _parse(omsetC.text);
                                         final cash = _parse(cashC.text);
                                         final pending = _parse(pendingC.text);
@@ -414,11 +435,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                         final kasbon = _parse(kasbonC.text);
                                         final bebanLain = _parse(bebanLainC.text);
 
-                                        final labaKotor = (omset * (marginPct > 0 ? marginPct : 0.10)).round();
+                                        final labaKotor = (omset * (marginPct > 0? marginPct : 0.10)).round();
                                         final labaBersih = labaKotor + pemLain - bebanGaji - bebanOps - bebanLain;
                                         final kasHariIni = cash + pemLain - bebanGaji - bebanOps - kasbon - bebanLain;
                                         final totalBebanHarian = bebanGaji + bebanOps + bebanLain;
-                                        final rasioBebanOmset = omset > 0 ? ((totalBebanHarian / omset) * 100).toStringAsFixed(1) : "0.0";
+                                        final rasioBebanOmset = omset > 0? ((totalBebanHarian / omset) * 100).toStringAsFixed(1) : "0.0";
 
                                         return Container(
                                           padding: const EdgeInsets.all(12),
@@ -429,11 +450,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                           ),
                                           child: Column(
                                             children: [
-                                              _buildRow("Beban Gaji (Otomasis Absensi)", "Rp ${fmt.format(bebanGaji)}", Colors.brown.shade800),
+                                              _buildRow("Beban Gaji (Otomatis Absensi)", "Rp ${fmt.format(bebanGaji)}", Colors.brown.shade800),
                                               const Divider(),
                                               _buildRow("Laba Kotor (${(marginPct * 100).toInt()}%)", "Rp ${fmt.format(labaKotor)}", Colors.purple.shade900),
                                               _buildRow("LABA BERSIH", "Rp ${fmt.format(labaBersih)}",
-                                                  labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700, isBold: true),
+                                                  labaBersih >= 0? Colors.green.shade700 : Colors.red.shade700, isBold: true),
                                               const Divider(),
                                               _buildRow("KAS HARI INI (Di Laci)", "Rp ${fmt.format(kasHariIni)}", Colors.blue.shade900, isBold: true),
                                               const Divider(),
@@ -449,6 +470,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                                     backgroundColor: Colors.brown.shade800,
                                                     foregroundColor: Colors.white,
                                                   ),
+                                                  // INI TOMBOL KUNING - FIX UTAMA
                                                   onPressed: () async {
                                                     final todayNormalized = DateTime(nowLive.year, nowLive.month, nowLive.day);
 
@@ -477,7 +499,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                                       ScaffoldMessenger.of(context).showSnackBar(
                                                         SnackBar(
                                                           content: Text(
-                                                            "Log Live ${DateFormat('dd MMM yyyy').format(todayNormalized)} berhasil diperbarui!",
+                                                            "Log Live ${DateFormat('dd MMM yyyy').format(todayNormalized)} berhasil diperbarui! (nimpa)",
                                                           ),
                                                           backgroundColor: Colors.green.shade800,
                                                           duration: const Duration(seconds: 2),
@@ -516,7 +538,7 @@ class _DashboardPageState extends State<DashboardPage> {
       padding: const EdgeInsets.only(top: 6),
       child: TextField(
         controller: controller,
-        keyboardType: isNum ? TextInputType.number : TextInputType.text,
+        keyboardType: isNum? TextInputType.number : TextInputType.text,
         style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           labelText: label,
@@ -535,8 +557,8 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-          Text(val, style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.w600, color: color)),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: isBold? FontWeight.bold : FontWeight.normal)),
+          Text(val, style: TextStyle(fontSize: 12, fontWeight: isBold? FontWeight.bold : FontWeight.w600, color: color)),
         ],
       ),
     );
@@ -555,7 +577,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   icon: const Icon(Icons.date_range, size: 16),
                   onPressed: () async {
                     final p = await showDatePicker(context: context, initialDate: logMulai, firstDate: DateTime(2023), lastDate: DateTime.now());
-                    if (p != null) setState(() => logMulai = p);
+                    if (p!= null) setState(() => logMulai = p);
                   },
                   label: Text("Mulai: ${DateFormat('dd/MM/yy').format(logMulai)}"),
                 ),
@@ -565,7 +587,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   icon: const Icon(Icons.date_range, size: 16),
                   onPressed: () async {
                     final p = await showDatePicker(context: context, initialDate: logSelesai, firstDate: DateTime(2023), lastDate: DateTime.now());
-                    if (p != null) setState(() => logSelesai = p);
+                    if (p!= null) setState(() => logSelesai = p);
                   },
                   label: Text("Sampai: ${DateFormat('dd/MM/yy').format(logSelesai)}"),
                 ),
@@ -583,8 +605,8 @@ class _DashboardPageState extends State<DashboardPage> {
               final end = DateTime(logSelesai.year, logSelesai.month, logSelesai.day, 23, 59, 59);
 
               final filtered = snap.data!
-                  .where((l) => l.tanggal.isAfter(start.subtract(const Duration(seconds: 1))) && l.tanggal.isBefore(end.add(const Duration(seconds: 1))))
-                  .toList();
+                 .where((l) => l.tanggal.isAfter(start.subtract(const Duration(seconds: 1))) && l.tanggal.isBefore(end.add(const Duration(seconds: 1))))
+                 .toList();
 
               int accOmset = 0;
               int accLabaBersih = 0;
@@ -633,7 +655,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                         style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 12,
-                                            color: l.labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700)),
+                                            color: l.labaBersih >= 0? Colors.green.shade700 : Colors.red.shade700)),
                                   ],
                                 ),
                                 const Divider(height: 10),
@@ -663,11 +685,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _klikTanggal(DateTime tgl) async {
     final dayKey = DateTime(tgl.year, tgl.month, tgl.day);
-    final absen = absenPerTanggal[dayKey] ?? [];
+    final absen = absenPerTanggal[dayKey]?? [];
     final laporan = await (db.select(db.laporanHarian)..where((t) => t.tanggal.equals(dayKey))).getSingleOrNull();
     final bintang = await (db.select(db.bintangHarian)..where((t) => t.tanggal.equals(dayKey))).get();
     final idsMasuk = absen.map((e) => e.karyawanId).toSet();
-    final bolong = allKaryawan.where((k) => !idsMasuk.contains(k.id)).toList();
+    final bolong = allKaryawan.where((k) =>!idsMasuk.contains(k.id)).toList();
 
     if (!mounted) return;
     showModalBottomSheet(
@@ -685,7 +707,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
             if (bintang.isNotEmpty) Text("⭐ Bintang: ${bintang.map((b) => "ID ${b.karyawanId}: ${b.bintang}★").join(', ')}", style: const TextStyle(fontSize: 11)),
             const Divider(),
-            if (laporan != null) ...[
+            if (laporan!= null)...[
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(12)),
@@ -696,8 +718,8 @@ class _DashboardPageState extends State<DashboardPage> {
                     _buildRow("Beban Gaji Hari Ini", "Rp ${fmt.format(laporan.totalGajiHariIni)}", Colors.black),
                     _buildRow("Kasbon Karyawan", "Rp ${fmt.format(laporan.kasbonKaryawan)}", Colors.black),
                     const Divider(),
-                    _buildRow("Laba Bersih", "Rp ${fmt.format(laporan.labaBersih)}", laporan.labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700, isBold: true),
-                    if (absen.isNotEmpty && laporan.totalPenjualan > 0) ...[
+                    _buildRow("Laba Bersih", "Rp ${fmt.format(laporan.labaBersih)}", laporan.labaBersih >= 0? Colors.green.shade700 : Colors.red.shade700, isBold: true),
+                    if (absen.isNotEmpty && laporan.totalPenjualan > 0)...[
                       const Divider(),
                       _buildRow("Produktivitas / Karyawan", "Rp ${fmt.format((laporan.totalPenjualan / absen.length).round())}", Colors.blue.shade900, isBold: true),
                     ]
@@ -752,11 +774,11 @@ class _DashboardPageState extends State<DashboardPage> {
               if (i < startWeekday) return const SizedBox();
               final day = i - startWeekday + 1;
               final tgl = DateTime(bulan.year, bulan.month, day);
-              final list = absenPerTanggal[DateTime(tgl.year, tgl.month, tgl.day)] ?? [];
+              final list = absenPerTanggal[DateTime(tgl.year, tgl.month, tgl.day)]?? [];
 
               Color warna = Colors.red.shade200;
               if (list.isNotEmpty) {
-                warna = (allKaryawan.isNotEmpty && list.length >= allKaryawan.length) ? Colors.green.shade200 : Colors.yellow.shade200;
+                warna = (allKaryawan.isNotEmpty && list.length >= allKaryawan.length)? Colors.green.shade200 : Colors.yellow.shade200;
               }
               return GestureDetector(
                 onTap: () => _klikTanggal(tgl),
