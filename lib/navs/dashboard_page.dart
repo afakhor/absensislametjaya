@@ -32,7 +32,6 @@ class _DashboardPageState extends State<DashboardPage> {
   Map<DateTime, List<AbsensiData>> absenPerTanggal = {};
   List<KaryawanData> allKaryawan = [];
 
-  // Menandai tanggal mana yang controller-nya sudah pernah diisi dari DB
   String _loadedDateKey = "";
 
   @override
@@ -43,10 +42,10 @@ class _DashboardPageState extends State<DashboardPage> {
         final currentNow = DateTime.now();
         final currentKey = DateFormat('yyyy-MM-dd').format(currentNow);
 
-        // Jika hari berganti (melewati pukul 00:00)
+        // Jika jam melewati 00:00 (berganti hari), reset kuncian dan form
         if (_loadedDateKey.isNotEmpty && _loadedDateKey != currentKey) {
-          _loadedDateKey = ""; // Reset kuncian
-          _resetControllers(); // Reset input ke "0" untuk hari baru
+          _loadedDateKey = "";
+          _resetControllers();
         }
         setState(() => nowLive = currentNow);
       }
@@ -184,8 +183,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
             final idsMasuk = absHariIni.map((e) => e.karyawanId).toSet();
             final bolong = allKar.where((k) => !idsMasuk.contains(k.id)).toList();
-            final full = absHariIni.where((a) => a.tipeKerja == 'FULL').toList();
-            final setengah = absHariIni.where((a) => a.tipeKerja == 'HALF' || a.tipeKerja == 'SETENGAH').toList();
+
+            final full = absHariIni.where((a) {
+              final t = a.tipeKerja.toUpperCase().trim();
+              return t == 'FULL' || t == 'FULL_DAY';
+            }).toList();
+
+            final setengah = absHariIni.where((a) {
+              final t = a.tipeKerja.toUpperCase().trim();
+              return t == 'HALF' || t == 'HALF_DAY' || t == 'SETENGAH' || t == '½ HARI';
+            }).toList();
 
             return StreamBuilder<List<BintangHarianData>>(
               stream: db.watchBintangHari(today),
@@ -262,7 +269,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                           } else {
                                             await db.updateTipeAbsen(a.id, v);
                                             await _loadBulan();
-                                            setState(() {});
+                                            if (mounted) setState(() {});
                                           }
                                         },
                                         itemBuilder: (_) => [
@@ -300,15 +307,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                           } else {
                                             await db.updateTipeAbsen(a.id, v);
                                             await _loadBulan();
-                                            setState(() {});
+                                            if (mounted) setState(() {});
                                           }
                                         },
                                         itemBuilder: (_) => [
                                           const PopupMenuItem(value: 'FULL', child: Text("Ubah ke Full")),
-                                          const PopupMenuItem(
-                                            value: 'HALF',
-                                            child: Text("Tetap ½ Hari"),
-                                          ),
+                                          const PopupMenuItem(value: 'HALF', child: Text("Tetap ½ Hari")),
                                           const PopupMenuItem(
                                             value: 'KASBON',
                                             child: Row(
@@ -351,12 +355,12 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
+
                         StreamBuilder<LaporanHarianData?>(
                           stream: db.watchLaporanHari(today),
                           builder: (c, lapSnap) {
                             final lap = lapSnap.data;
 
-                            // Isi controller dari DB HANYA SEKALI per hari saat dibuka pertama kali
                             if (lap != null && _loadedDateKey != todayKeyStr) {
                               _loadedDateKey = todayKeyStr;
                               omsetC.text = lap.totalPenjualan.toString();
@@ -446,7 +450,6 @@ class _DashboardPageState extends State<DashboardPage> {
                                                     foregroundColor: Colors.white,
                                                   ),
                                                   onPressed: () async {
-                                                    // FIX UPSERT BANYAK TEKAN: Pukul 00:00:00 persis
                                                     final todayNormalized = DateTime(nowLive.year, nowLive.month, nowLive.day);
 
                                                     await db.simpanLaporanHarianFull(
@@ -467,7 +470,6 @@ class _DashboardPageState extends State<DashboardPage> {
                                                       totalPiutangAkhir: pending + bebanLain,
                                                     );
 
-                                                    // Refresh data kalender & UI
                                                     await _loadBulan();
 
                                                     if (context.mounted) {
