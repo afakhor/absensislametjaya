@@ -462,7 +462,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                               _buildRow("Rasio Beban / Omset", "$rasioBebanOmset %", Colors.black87),
                                               _buildRow("Pending / Piutang Baru", "Rp ${fmt.format(pending)}", Colors.orange.shade800),
                                               const SizedBox(height: 12),
-                                              SizedBox(
+                                                                                            SizedBox(
                                                 width: double.infinity,
                                                 height: 44,
                                                 child: ElevatedButton(
@@ -470,12 +470,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                                     backgroundColor: Colors.brown.shade800,
                                                     foregroundColor: Colors.white,
                                                   ),
-                                                  // INI TOMBOL KUNING - FIX UTAMA
                                                   onPressed: () async {
+                                                    // FIX: pakai nowLive biar tanggal selalu konsisten
                                                     final todayNormalized = DateTime(nowLive.year, nowLive.month, nowLive.day);
 
                                                     await db.simpanLaporanHarianFull(
-                                                      tgl: todayNormalized,
+                                                      tgl: todayNormalized, // <- kunci: 1 tanggal = 1 baris
                                                       omset: omset,
                                                       cash: cash,
                                                       piutangBaru: pending,
