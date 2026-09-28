@@ -195,7 +195,7 @@ class _OwnerPageState extends State<OwnerPage> {
           children: [
             // ================= BACKUP & RESTORE DATA (.bskro) =================
             const Text(
-              'BACKUP & RESTORE DATA (.bskro)',
+              'BACKUP & RESTORE DATA',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
             ),
             const SizedBox(height: 8),
@@ -241,7 +241,7 @@ class _OwnerPageState extends State<OwnerPage> {
             TextField(
               controller: _kategoriController,
               decoration: const InputDecoration(
-                labelText: 'Nama Kategori (misal: Tukang)',
+                labelText: 'Nama Kategori',
                 isDense: true,
               ),
             ),
