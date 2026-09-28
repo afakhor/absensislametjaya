@@ -120,9 +120,7 @@ class KasbonHarian extends Table {
   TextColumn get keterangan => text().withDefault(const Constant(''))();
 
   @override
-  List<String> get customConstraints => [
-        'UNIQUE(karyawan_id, tanggal)'
-      ];
+  List<String> get customConstraints => ['UNIQUE(karyawan_id, tanggal)'];
 }
 
 @DriftDatabase(tables: [
@@ -181,20 +179,12 @@ class AppDatabase extends _$AppDatabase {
           if (from < 9) {
             await m.createTable(kasbonHarian);
           }
-          if (from < 10) {
-            // Fix kasbon biar bisa update per karyawan per hari
-            await m.createTable(kasbonHarian);
-          }
         },
       );
 
-  // --- HELPER METHODS DASHBOARD ---
-
   Future<void> updateTipeAbsen(int idAbsensi, String tipe) async {
     await (update(absensi)..where((t) => t.id.equals(idAbsensi))).write(
-      AbsensiCompanion(
-        tipeKerja: Value(tipe.toUpperCase().trim()),
-      ),
+      AbsensiCompanion(tipeKerja: Value(tipe.toUpperCase().trim())),
     );
   }
 
@@ -263,7 +253,7 @@ class AppDatabase extends _$AppDatabase {
     return totalGaji;
   }
 
-  // INI KUNCI NO 2: Setiap tanggal = 1 baris, tekan simpan berapa kalipun akan NIMPA
+  // === FIX FINAL: PASTI NIMPA PER TANGGAL ===
   Future<void> simpanLaporanHarianFull({
     required DateTime tgl,
     required int omset,
@@ -281,46 +271,70 @@ class AppDatabase extends _$AppDatabase {
     required int kasHariIni,
     required int totalPiutangAkhir,
   }) async {
-    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0); // normalisasi ke 00:00
-    await into(laporanHarian).insertOnConflictUpdate(
-      LaporanHarianCompanion(
-        tanggal: Value(start),
-        totalPenjualan: Value(omset),
-        cash: Value(cash),
-        piutangBaru: Value(piutangBaru),
-        namaPelangganBon: Value(namaPelanggan),
-        tambahanLain: Value(pemLain),
-        keteranganTambahan: Value(ketPemLain),
-        totalGajiHariIni: Value(bebanGaji),
-        bebanOperasional: Value(bebanOps),
-        kasbonKaryawan: Value(kasbon),
-        saldoPiutangKemarin: Value(piutangKemarin),
-        labaKotor: Value(labaKotor),
-        labaBersih: Value(labaBersih),
-        kasHariIni: Value(kasHariIni),
-        totalPiutangAkhir: Value(totalPiutangAkhir),
-      ),
-    );
+    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
+    final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
+
+    final existing = await (select(laporanHarian)
+         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+       .getSingleOrNull();
+
+    if (existing!= null) {
+      // UPDATE = NIMPA
+      await (update(laporanHarian)..where((t) => t.id.equals(existing.id))).write(
+        LaporanHarianCompanion(
+          totalPenjualan: Value(omset),
+          cash: Value(cash),
+          piutangBaru: Value(piutangBaru),
+          namaPelangganBon: Value(namaPelanggan),
+          tambahanLain: Value(pemLain),
+          keteranganTambahan: Value(ketPemLain),
+          totalGajiHariIni: Value(bebanGaji),
+          bebanOperasional: Value(bebanOps),
+          kasbonKaryawan: Value(kasbon),
+          saldoPiutangKemarin: Value(piutangKemarin),
+          labaKotor: Value(labaKotor),
+          labaBersih: Value(labaBersih),
+          kasHariIni: Value(kasHariIni),
+          totalPiutangAkhir: Value(totalPiutangAkhir),
+        ),
+      );
+    } else {
+      // INSERT BARU
+      await into(laporanHarian).insert(
+        LaporanHarianCompanion.insert(
+          tanggal: start,
+          totalPenjualan: Value(omset),
+          cash: Value(cash),
+          piutangBaru: Value(piutangBaru),
+          namaPelangganBon: Value(namaPelanggan),
+          bebanOperasional: Value(bebanOps),
+          kasbonKaryawan: Value(kasbon),
+          tambahanLain: Value(pemLain),
+          keteranganTambahan: Value(ketPemLain),
+          saldoPiutangKemarin: Value(piutangKemarin),
+          totalGajiHariIni: Value(bebanGaji),
+          labaKotor: Value(labaKotor),
+          labaBersih: Value(labaBersih),
+          kasHariIni: Value(kasHariIni),
+          totalPiutangAkhir: Value(totalPiutangAkhir),
+        ),
+      );
+    }
   }
 
-  // FIX KASBON: sekarang update per karyawan per tanggal, bukan nambah terus
   Future<void> simpanKasbonHarian(
       int karyawanId, DateTime tanggal, int nominal, String keterangan) async {
     final startOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day);
     final endOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day, 23, 59, 59, 999);
-
     final existing = await (select(kasbonHarian)
-     ..where((t) => t.karyawanId.equals(karyawanId))
-     ..where((t) => t.tanggal.isBiggerOrEqualValue(startOfDay))
-     ..where((t) => t.tanggal.isSmallerOrEqualValue(endOfDay))
-    ).getSingleOrNull();
-
+         ..where((t) => t.karyawanId.equals(karyawanId))
+         ..where((t) => t.tanggal.isBiggerOrEqualValue(startOfDay))
+         ..where((t) => t.tanggal.isSmallerOrEqualValue(endOfDay)))
+       .getSingleOrNull();
     if (existing!= null) {
       await (update(kasbonHarian)..where((t) => t.id.equals(existing.id))).write(
-        KasbonHarianCompanion(
-          nominal: Value(nominal),
-          keterangan: Value(keterangan),
-        ),
+        KasbonHarianCompanion(nominal: Value(nominal), keterangan: Value(keterangan)),
       );
     } else {
       await into(kasbonHarian).insert(
@@ -336,8 +350,7 @@ class AppDatabase extends _$AppDatabase {
 
   Stream<List<KasbonHarianData>> watchKasbonHariIni(DateTime tanggal) {
     final startOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day);
-    final endOfDay =
-        DateTime(tanggal.year, tanggal.month, tanggal.day, 23, 59, 59, 999);
+    final endOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day, 23, 59, 59, 999);
     return (select(kasbonHarian)
          ..where((tbl) => tbl.tanggal.isBiggerOrEqualValue(startOfDay))
          ..where((tbl) => tbl.tanggal.isSmallerOrEqualValue(endOfDay)))
