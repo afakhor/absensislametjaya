@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../dbases/localdatabase.dart';
 import '../dbases/setowner_db.dart';
+import 'backup_service.dart'; // Jangan lupa sesuaikan path import ini
 
 class OwnerPage extends StatefulWidget {
   const OwnerPage({super.key});
@@ -154,6 +155,36 @@ class _OwnerPageState extends State<OwnerPage> {
     }
   }
 
+  // --- FITUR BACKUP & RESTORE ---
+  Future<void> _handleBackup() async {
+    final path = await BackupService.exportBackup();
+    if (!mounted) return;
+    if (path != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Backup (.bskro) Berhasil!\nSimpan di: $path')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal melakukan backup data.')),
+      );
+    }
+  }
+
+  Future<void> _handleRestore() async {
+    final success = await BackupService.importBackup();
+    if (!mounted) return;
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Restore data (.bskro) berhasil! Silakan muat ulang aplikasi.')),
+      );
+      setState(() {}); // Refresh UI
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Restore dibatalkan atau gagal.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -162,6 +193,45 @@ class _OwnerPageState extends State<OwnerPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ================= BACKUP & RESTORE DATA (.bskro) =================
+            const Text(
+              'BACKUP & RESTORE DATA (.bskro)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _handleBackup,
+                    icon: const Icon(Icons.cloud_upload, size: 18),
+                    label: const Text('Backup (.bskro)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.brown.shade700,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _handleRestore,
+                    icon: const Icon(Icons.cloud_download, size: 18),
+                    label: const Text('Restore (.bskro)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.brown.shade100,
+                      foregroundColor: Colors.brown.shade900,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const Divider(height: 32, thickness: 1),
+
             // ================= TAMBAH KATEGORI / JABATAN =================
             const Text(
               'TAMBAH KATEGORI / JABATAN',
