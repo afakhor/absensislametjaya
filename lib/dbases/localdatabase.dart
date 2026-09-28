@@ -118,6 +118,11 @@ class KasbonHarian extends Table {
   DateTimeColumn get tanggal => dateTime()();
   IntColumn get nominal => integer().withDefault(const Constant(0))();
   TextColumn get keterangan => text().withDefault(const Constant(''))();
+
+  @override
+  List<String> get customConstraints => [
+        'UNIQUE(karyawan_id, tanggal)'
+      ];
 }
 
 @DriftDatabase(tables: [
@@ -134,14 +139,12 @@ class KasbonHarian extends Table {
 ])
 class AppDatabase extends _$AppDatabase {
   static final AppDatabase _instance = AppDatabase._internal();
-
   factory AppDatabase() => _instance;
-
   AppDatabase._internal()
       : super(driftDatabase(name: 'tb_slamet_jaya_v8_clean'));
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -178,6 +181,10 @@ class AppDatabase extends _$AppDatabase {
           if (from < 9) {
             await m.createTable(kasbonHarian);
           }
+          if (from < 10) {
+            // Fix kasbon biar bisa update per karyawan per hari
+            await m.createTable(kasbonHarian);
+          }
         },
       );
 
@@ -194,16 +201,14 @@ class AppDatabase extends _$AppDatabase {
   Future<void> setBintang(int karyawanId, DateTime tgl, int rating) async {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
-
     final existing = await (select(bintangHarian)
-          ..where((t) => t.karyawanId.equals(karyawanId))
-          ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
-          ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
-        .getSingleOrNull();
-
-    if (existing != null) {
+         ..where((t) => t.karyawanId.equals(karyawanId))
+         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+       .getSingleOrNull();
+    if (existing!= null) {
       await (update(bintangHarian)..where((t) => t.id.equals(existing.id)))
-          .write(BintangHarianCompanion(bintang: Value(rating)));
+         .write(BintangHarianCompanion(bintang: Value(rating)));
     } else {
       await into(bintangHarian).insert(
         BintangHarianCompanion.insert(
@@ -219,43 +224,35 @@ class AppDatabase extends _$AppDatabase {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
     return (select(bintangHarian)
-          ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
-          ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
-        .watch();
+         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+       .watch();
   }
 
   Stream<LaporanHarianData?> watchLaporanHari(DateTime tgl) {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
     return (select(laporanHarian)
-          ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
-          ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
-        .watchSingleOrNull();
+         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+       .watchSingleOrNull();
   }
 
   Future<int> hitungGajiHariIni(DateTime tgl) async {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
-
     final absensiList = await (select(absensi)
-          ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
-          ..where((t) => t.jamMasuk.isSmallerOrEqualValue(end)))
-        .get();
-
-    // Map Kategori untuk mendapatkan tarif per hari
+         ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
+         ..where((t) => t.jamMasuk.isSmallerOrEqualValue(end)))
+       .get();
     final listKategori = await select(kategoriKaryawan).get();
     final mapKategori = {for (var k in listKategori) k.id: k.tarifPerHari};
-
-    // Map Karyawan untuk mendapatkan kategoriId
     final listKaryawan = await select(karyawan).get();
     final mapKaryawan = {for (var k in listKaryawan) k.id: k.kategoriId};
-
     int totalGaji = 0;
-
     for (var abs in absensiList) {
       final katId = mapKaryawan[abs.karyawanId];
-      final tarif = mapKategori[katId] ?? 0;
-
+      final tarif = mapKategori[katId]?? 0;
       final tipe = abs.tipeKerja.toUpperCase().trim();
       if (tipe == 'HALF' || tipe == 'HALF_DAY' || tipe == 'SETENGAH' || tipe == '½ HARI') {
         totalGaji += (tarif / 2).round();
@@ -266,6 +263,7 @@ class AppDatabase extends _$AppDatabase {
     return totalGaji;
   }
 
+  // INI KUNCI NO 2: Setiap tanggal = 1 baris, tekan simpan berapa kalipun akan NIMPA
   Future<void> simpanLaporanHarianFull({
     required DateTime tgl,
     required int omset,
@@ -283,7 +281,7 @@ class AppDatabase extends _$AppDatabase {
     required int kasHariIni,
     required int totalPiutangAkhir,
   }) async {
-    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
+    final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0); // normalisasi ke 00:00
     await into(laporanHarian).insertOnConflictUpdate(
       LaporanHarianCompanion(
         tanggal: Value(start),
@@ -305,27 +303,44 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  // FIX KASBON: sekarang update per karyawan per tanggal, bukan nambah terus
   Future<void> simpanKasbonHarian(
       int karyawanId, DateTime tanggal, int nominal, String keterangan) async {
     final startOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day);
-    await into(kasbonHarian).insertOnConflictUpdate(
-      KasbonHarianCompanion.insert(
-        karyawanId: karyawanId,
-        tanggal: startOfDay,
-        nominal: Value(nominal),
-        keterangan: Value(keterangan),
-      ),
-    );
+    final endOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day, 23, 59, 59, 999);
+
+    final existing = await (select(kasbonHarian)
+     ..where((t) => t.karyawanId.equals(karyawanId))
+     ..where((t) => t.tanggal.isBiggerOrEqualValue(startOfDay))
+     ..where((t) => t.tanggal.isSmallerOrEqualValue(endOfDay))
+    ).getSingleOrNull();
+
+    if (existing!= null) {
+      await (update(kasbonHarian)..where((t) => t.id.equals(existing.id))).write(
+        KasbonHarianCompanion(
+          nominal: Value(nominal),
+          keterangan: Value(keterangan),
+        ),
+      );
+    } else {
+      await into(kasbonHarian).insert(
+        KasbonHarianCompanion.insert(
+          karyawanId: karyawanId,
+          tanggal: startOfDay,
+          nominal: Value(nominal),
+          keterangan: Value(keterangan),
+        ),
+      );
+    }
   }
 
   Stream<List<KasbonHarianData>> watchKasbonHariIni(DateTime tanggal) {
     final startOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day);
     final endOfDay =
         DateTime(tanggal.year, tanggal.month, tanggal.day, 23, 59, 59, 999);
-
     return (select(kasbonHarian)
-          ..where((tbl) => tbl.tanggal.isBiggerOrEqualValue(startOfDay))
-          ..where((tbl) => tbl.tanggal.isSmallerOrEqualValue(endOfDay)))
-        .watch();
+         ..where((tbl) => tbl.tanggal.isBiggerOrEqualValue(startOfDay))
+         ..where((tbl) => tbl.tanggal.isSmallerOrEqualValue(endOfDay)))
+       .watch();
   }
 }
