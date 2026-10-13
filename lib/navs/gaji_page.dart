@@ -165,55 +165,98 @@ class _GajiPageState extends State<GajiPage> {
 }
 
   // FILTER & INDEXING LENGKAP - yang dilingkari biru
-  void _showFilterLengkap(List<KaryawanData> listKar){
-    showModalBottomSheet(context: context, isScrollControlled: true, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))), builder: (ctx)=> StatefulBuilder(builder: (c,setM)=> DraggableScrollableSheet(expand: false, initialChildSize: 0.85, maxChildSize: 0.95, minChildSize: 0.5, builder: (_,ctrl)=> Container(padding: const EdgeInsets.all(16), child: ListView(controller: ctrl, children:[
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[const Text("Filter & Indexing Lengkap", style: TextStyle(fontWeight: FontWeight.bold, fontSize:16)), IconButton(icon: const Icon(Icons.close), onPressed: ()=>Navigator.pop(ctx))]),
-      const Divider(),
-      ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.date_range, color: roast), title: const Text("Filter Periode Seminggu", style: TextStyle(fontSize:13, fontWeight: FontWeight.bold)), subtitle: Text(_selectedDateRange==null? "Semua Rentang Tanggal" : "${DateFormat('dd/MM/yy').format(_selectedDateRange!.start)} - ${DateFormat('dd/MM/yy').format(_selectedDateRange!.end)}"), trailing: const Icon(Icons.calendar_month), onTap: () async {
-        final p = await showDateRangePicker(context: context, firstDate: DateTime(2020), lastDate: DateTime(2030), builder: (c,ch)=> Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth:390), child: ch!)));
-        if(p!=null){ setM(()=>_selectedDateRange=p); setState((){}); }
-      }),
-      const SizedBox(height:12),
-      const Text("Filter Status", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), const SizedBox(height:6),
-      Wrap(spacing:8, runSpacing:8, children:[
-        _chipFilter("BELUM_GAJIAN","Belum Gajian",caramel,setM),
-        _chipFilter("1 MINGGU","1 Minggu",coffee,setM),
-        _chipFilter("2 MINGGU","2 Minggu",espresso,setM),
-        _chipFilter("LUNAS","Lunas",roast,setM),
-      ]),
-      const SizedBox(height:12),
-      const Text("Filter Kasbon (Live Dashboard)", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), const SizedBox(height:6),
-      Wrap(spacing:8, children:[
-        FilterChip(label: const Text("Ada Kasbon"), selected: _filterHanyaKasbon, selectedColor: espresso.withOpacity(0.3), onSelected: (v){ setM(()=>_filterHanyaKasbon=v); if(v) setM(()=>_filterTanpaKasbon=false); setState((){}); }),
-        FilterChip(label: const Text("Tidak Ada Kasbon"), selected: _filterTanpaKasbon, onSelected: (v){ setM(()=>_filterTanpaKasbon=v); if(v) setM(()=>_filterHanyaKasbon=false); setState((){}); }),
-      ]),
-      const SizedBox(height:12),
-      const Text("Filter Bonus (Rating Live)", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), const SizedBox(height:6),
-      Wrap(spacing:8, children:[
-        FilterChip(label: const Text("Ada Bonus"), selected: _filterHanyaBonus, selectedColor: caramel.withOpacity(0.3), onSelected: (v){ setM(()=>_filterHanyaBonus=v); if(v) setM(()=>_filterTanpaBonus=false); setState((){}); }),
-        FilterChip(label: const Text("Tidak Ada Bonus"), selected: _filterTanpaBonus, onSelected: (v){ setM(()=>_filterTanpaBonus=v); if(v) setM(()=>_filterHanyaBonus=false); setState((){}); }),
-      ]),
-      const SizedBox(height:12),
-      const Text("Filter Karyawan", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), const SizedBox(height:6),
-      Wrap(spacing:6, runSpacing:6, children: listKar.map((k){
-        final sel = _selectedKaryawanIds.contains(k.id);
-        return FilterChip(label: Text(k.nama), selected: sel, onSelected: (v){ setM(()=> v? _selectedKaryawanIds.add(k.id) : _selectedKaryawanIds.remove(k.id)); setState((){}); });
-      }).toList()),
-      const SizedBox(height:12),
-      SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text("Urutkan Terbanyak (Indexing)", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), subtitle: const Text("Gaji terbesar di atas", style: TextStyle(fontSize:11)), value: _sortByTerbanyak, activeColor: roast, onChanged: (v){ setM(()=>_sortByTerbanyak=v); setState((){}); }),
-      const SizedBox(height:16),
-      Row(children:[
-        Expanded(child: OutlinedButton(onPressed: (){
-          setM((){
-            _selectedKaryawanIds.clear(); _selectedStatusColors.clear(); _filterHanyaKasbon=false; _filterTanpaKasbon=false; _filterHanyaBonus=false; _filterTanpaBonus=false; _selectedDateRange=null; _sortByTerbanyak=false;
-          });
-          setState((){});
-        }, child: const Text("Reset"))),
-        const SizedBox(width:12),
-        Expanded(flex:2, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: roast), onPressed: ()=>Navigator.pop(ctx), child: const Text("Terapkan Filter", style: TextStyle(color:Colors.white)))),
-      ]),
-      const SizedBox(height:20),
-    ])));
+    // FIX BUILD ERROR 169 - FILTER LENGKAP YANG DILINGKARI BIRU
+  void _showFilterLengkap(List<KaryawanData> listKar) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (c, setM) {
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.85,
+              maxChildSize: 0.95,
+              minChildSize: 0.5,
+              builder: (_, ctrl) {
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  child: ListView(
+                    controller: ctrl,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("Filter & Indexing Lengkap", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                        ],
+                      ),
+                      const Divider(),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.date_range, color: roast),
+                        title: const Text("Filter Periode Seminggu", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        subtitle: Text(_selectedDateRange == null ? "Semua Rentang Tanggal" : "${DateFormat('dd/MM/yy').format(_selectedDateRange!.start)} - ${DateFormat('dd/MM/yy').format(_selectedDateRange!.end)}"),
+                        trailing: const Icon(Icons.calendar_month),
+                        onTap: () async {
+                          final p = await showDateRangePicker(context: context, firstDate: DateTime(2020), lastDate: DateTime(2030));
+                          if (p != null) {
+                            setM(() => _selectedDateRange = p);
+                            setState(() {});
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      const Text("Filter Status", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        _chipFilter("BELUM_GAJIAN", "Belum Gajian", caramel, setM),
+                        _chipFilter("1 MINGGU", "1 Minggu", coffee, setM),
+                        _chipFilter("2 MINGGU", "2 Minggu", espresso, setM),
+                        _chipFilter("LUNAS", "Lunas", roast, setM),
+                      ]),
+                      const SizedBox(height: 12),
+                      const Text("Filter Kasbon (Live)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Wrap(spacing: 8, children: [
+                        FilterChip(label: const Text("Ada Kasbon"), selected: _filterHanyaKasbon, onSelected: (v) { setM(() { _filterHanyaKasbon = v; if (v) _filterTanpaKasbon = false; }); setState(() {}); }),
+                        FilterChip(label: const Text("Tidak Ada Kasbon"), selected: _filterTanpaKasbon, onSelected: (v) { setM(() { _filterTanpaKasbon = v; if (v) _filterHanyaKasbon = false; }); setState(() {}); }),
+                      ]),
+                      const SizedBox(height: 12),
+                      const Text("Filter Bonus (Rating Live)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Wrap(spacing: 8, children: [
+                        FilterChip(label: const Text("Ada Bonus"), selected: _filterHanyaBonus, onSelected: (v) { setM(() { _filterHanyaBonus = v; if (v) _filterTanpaBonus = false; }); setState(() {}); }),
+                        FilterChip(label: const Text("Tidak Ada Bonus"), selected: _filterTanpaBonus, onSelected: (v) { setM(() { _filterTanpaBonus = v; if (v) _filterHanyaBonus = false; }); setState(() {}); }),
+                      ]),
+                      const SizedBox(height: 12),
+                      const Text("Filter Karyawan", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Wrap(spacing: 6, runSpacing: 6, children: listKar.map((k) {
+                        final sel = _selectedKaryawanIds.contains(k.id);
+                        return FilterChip(label: Text(k.nama), selected: sel, onSelected: (v) { setM(() => v? _selectedKaryawanIds.add(k.id) : _selectedKaryawanIds.remove(k.id)); setState(() {}); });
+                      }).toList()),
+                      const SizedBox(height: 12),
+                      SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text("Urutkan Terbanyak", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), value: _sortByTerbanyak, activeColor: roast, onChanged: (v) { setM(() => _sortByTerbanyak = v); setState(() {}); }),
+                      const SizedBox(height: 16),
+                      Row(children: [
+                        Expanded(child: OutlinedButton(onPressed: () { setM(() { _selectedKaryawanIds.clear(); _selectedStatusColors.clear(); _filterHanyaKasbon = false; _filterTanpaKasbon = false; _filterHanyaBonus = false; _filterTanpaBonus = false; _selectedDateRange = null; _sortByTerbanyak = false; }); setState(() {}); }, child: const Text("Reset"))),
+                        const SizedBox(width: 12),
+                        Expanded(flex: 2, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: roast), onPressed: () => Navigator.pop(ctx), child: const Text("Terapkan Filter", style: TextStyle(color: Colors.white)))),
+                      ]),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
   }
   Widget _chipFilter(String val, String label, Color col, StateSetter setM){
     final sel = _selectedStatusColors.contains(val);
