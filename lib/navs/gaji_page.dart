@@ -213,7 +213,7 @@ class _GajiPageState extends State<GajiPage> {
         Expanded(flex:2, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: roast), onPressed: ()=>Navigator.pop(ctx), child: const Text("Terapkan Filter", style: TextStyle(color:Colors.white)))),
       ]),
       const SizedBox(height:20),
-    ]))))));
+    ])));
   }
   Widget _chipFilter(String val, String label, Color col, StateSetter setM){
     final sel = _selectedStatusColors.contains(val);
