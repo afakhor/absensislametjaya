@@ -69,22 +69,19 @@ class _GajiPageState extends State<GajiPage> {
     return bersih < 0 ? 0 : bersih;
   }
 
-  // FIX: RATING LIVE DARI DASHBOARD - AMAN TIDAK PAKAI db.rating
+  // FIX UTAMA: AMBIL BINTANG DARI TABEL YANG SAMA DENGAN DASHBOARD
   Future<double> _getRatingLive(int karyawanId, DateTime start, DateTime end) async {
     try {
-      // TODO: ganti dengan method asli Dashboard kamu
-      // contoh: return await db.getRataRataRating(karyawanId, start, end);
-      // sementara ambil dari absensi jika ada kolom rating, kalau tidak return 0
-      final data = await db.getAbsensiPeriode(karyawanId, start, end);
-      if (data.isEmpty) return 0.0;
-      double total = 0; int count = 0;
-      for (var a in data) {
-        try {
-          final r = (a as dynamic).rating as double?;
-          if (r != null && r > 0) { total += r; count++; }
-        } catch (_) {}
-      }
-      return count == 0 ? 0.0 : total / count;
+      final startDay = DateTime(start.year, start.month, start.day);
+      final endDay = DateTime(end.year, end.month, end.day, 23, 59, 59);
+      final list = await (db.select(db.bintangHarian)
+            ..where((t) => t.karyawanId.equals(karyawanId))
+            ..where((t) => t.tanggal.isBetweenValues(startDay, endDay)))
+          .get();
+      if (list.isEmpty) return 0.0;
+      double total = 0;
+      for (var b in list) total += b.bintang.toDouble();
+      return total / list.length;
     } catch (_) {
       return 0.0;
     }
@@ -107,7 +104,7 @@ class _GajiPageState extends State<GajiPage> {
     pdf.addPage(pw.Page(pageFormat: PdfPageFormat.roll80, margin: const pw.EdgeInsets.all(12), build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
       pw.Center(child: pw.Text("TB. SLAMET JAYA", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold))),
       pw.Divider(),
-      pw.Text("Nama: $nama | Periode: $periode | Rating: ${rating.toStringAsFixed(1)}", style: const pw.TextStyle(fontSize: 9)),
+      pw.Text("Nama: $nama | Periode: $periode | Rating Live: ${rating.toStringAsFixed(1)}", style: const pw.TextStyle(fontSize: 9)),
       pw.Divider(),
       pw.Text("Pokok Rp ${fmt.format(pokok)} + Bonus Manual Rp ${fmt.format(bonus)} - Kasbon Rp ${fmt.format(kasbon)} = Rp ${fmt.format(total)}", style: const pw.TextStyle(fontSize: 9)),
     ])));
@@ -141,7 +138,7 @@ class _GajiPageState extends State<GajiPage> {
             ])),
           ]),
           const SizedBox(height: 12),
-          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: caramel.withOpacity(0.12), borderRadius: BorderRadius.circular(10)), child: Text("Rating ${ratingLive.toStringAsFixed(1)} dari Dashboard Live (akumulasi minggu ini). Saran Rp ${fmt.format(saran)}, tapi user tetap isi manual.", style: TextStyle(fontSize: 11, color: roast))),
+          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: caramel.withOpacity(0.12), borderRadius: BorderRadius.circular(10)), child: Text("Rating ${ratingLive.toStringAsFixed(1)} dari Dashboard Live (akumulasi bintangHarian minggu ini). Saran Rp ${fmt.format(saran)}, tapi user tetap isi manual.", style: TextStyle(fontSize: 11, color: roast))),
           const SizedBox(height: 12),
           TextField(controller: c, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: "Input Bonus Manual", hintText: "0 (kosong=0)", prefixIcon: Icon(Icons.card_giftcard, color: caramel), suffixText: "Saran ${fmt.format(saran)}", focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: coffee, width: 2)), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: caramel.withOpacity(0.5))), filled: true, fillColor: caramel.withOpacity(0.08))),
           const SizedBox(height: 16),
