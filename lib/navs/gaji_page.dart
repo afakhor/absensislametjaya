@@ -10,18 +10,12 @@ import 'package:share_plus/share_plus.dart';
 import '../dbases/localdatabase.dart';
 import '../dbases/gaji_db.dart';
 
-// === EXTENSION FIX untuk inputPotonganKasbon yang belum ada di AppDatabase ===
+// FIX build error inputPotonganKasbon belum ada
 extension AppDatabaseKasbon on AppDatabase {
   Future<void> inputPotonganKasbon(int gajiId, int nominal) async {
-    // Ambil data gaji existing
     final g = await (select(gajiMingguan)..where((t) => t.id.equals(gajiId))).getSingle();
-    // Update totalGaji = pokok + bonus - kasbon (logic sesuai chat: cek dan recek kalkulasi)
     final newTotal = g.totalGajiPokok + g.bonusMingguan - nominal;
-    await (update(gajiMingguan)..where((t) => t.id.equals(gajiId))).write(
-      GajiMingguanCompanion(totalGaji: Value(newTotal)),
-    );
-    // TODO: jika kamu punya tabel kasbon terpisah, insert juga kesana:
-    // await into(kasbon).insert(KasbonCompanion(karyawanId: Value(g.karyawanId), jumlah: Value(nominal), tanggal: Value(DateTime.now())));
+    await (update(gajiMingguan)..where((t) => t.id.equals(gajiId))).write(GajiMingguanCompanion(totalGaji: Value(newTotal)));
   }
 }
 
@@ -65,17 +59,16 @@ class _GajiPageState extends State<GajiPage> {
     final pdf = pw.Document();
     pdf.addPage(pw.Page(pageFormat: PdfPageFormat.roll80, margin: const pw.EdgeInsets.all(12), build: (c)=> pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children:[
       pw.Center(child: pw.Text("TB. SLAMET JAYA", style: pw.TextStyle(fontSize:16, fontWeight: pw.FontWeight.bold, color: PdfColors.orange800))),
-      pw.SizedBox(height:2), pw.Center(child: pw.Text("DUSUN JRANJANG RT 12/RW 6 KERTOSUKO KRUCIL PROBOLINGGO (082229109246)", textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize:7))),
+      pw.Center(child: pw.Text("DUSUN JRANJANG RT 12/RW 6 KERTOSUKO KRUCIL PROBOLINGGO (082229109246)", textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize:7))),
       pw.SizedBox(height:6), pw.Divider(thickness:0.8), pw.SizedBox(height:4),
       pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("Nama:", style: const pw.TextStyle(fontSize:9)), pw.Text(nama, style: pw.TextStyle(fontSize:9, fontWeight: pw.FontWeight.bold))]),
       pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("Periode:", style: const pw.TextStyle(fontSize:9)), pw.Text(periode, style: const pw.TextStyle(fontSize:8))]),
       pw.SizedBox(height:4), pw.Divider(thickness:0.8), pw.SizedBox(height:4),
-      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("Gaji Pokok", style: const pw.TextStyle(fontSize:9)), pw.Text("Rp ${fmt.format(pokok)}", style: const pw.TextStyle(fontSize:9))]),
-      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("Bonus", style: const pw.TextStyle(fontSize:9)), pw.Text("Rp ${fmt.format(bonus)}", style: const pw.TextStyle(fontSize:9))]),
-      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("Kasbon", style: const pw.TextStyle(fontSize:9)), pw.Text("- Rp ${fmt.format(kasbon)}", style: const pw.TextStyle(fontSize:9))]),
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("Gaji Pokok (Live Dashboard)", style: const pw.TextStyle(fontSize:9)), pw.Text("Rp ${fmt.format(pokok)}", style: const pw.TextStyle(fontSize:9))]),
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("Bonus (Rating Live)", style: const pw.TextStyle(fontSize:9)), pw.Text("Rp ${fmt.format(bonus)}", style: const pw.TextStyle(fontSize:9))]),
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("Kasbon (Live)", style: const pw.TextStyle(fontSize:9)), pw.Text("- Rp ${fmt.format(kasbon)}", style: const pw.TextStyle(fontSize:9))]),
       pw.SizedBox(height:4), pw.Divider(thickness:0.8), pw.SizedBox(height:4),
       pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("TOTAL TERIMA:", style: pw.TextStyle(fontSize:10, fontWeight: pw.FontWeight.bold)), pw.Text("Rp ${fmt.format(total)}", style: pw.TextStyle(fontSize:10, fontWeight: pw.FontWeight.bold))]),
-      pw.SizedBox(height:2), pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children:[pw.Text("Tgl:", style: const pw.TextStyle(fontSize:8)), pw.Text(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()), style: const pw.TextStyle(fontSize:8))]),
     ])));
     return pdf;
   }
@@ -92,14 +85,14 @@ class _GajiPageState extends State<GajiPage> {
 
   void _dialogBonus(BuildContext ctx, GajiMingguanData g) async {
     final c = TextEditingController(text: g.bonusMingguan==0? "" : g.bonusMingguan.toString());
-    showDialog(context: context, builder: (_)=> AlertDialog(title: const Text("Box Bonus Mingguan"), content: TextField(controller:c, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText:"0 (kosong=0)", border: OutlineInputBorder())), actions:[
+    showDialog(context: context, builder: (_)=> AlertDialog(title: const Text("Box Bonus Mingguan - dari Rating Live Dashboard"), content: TextField(controller:c, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText:"0 (kosong=0)", border: OutlineInputBorder())), actions:[
       TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text("Batal")),
       ElevatedButton(onPressed: () async { await db.inputBonusMingguan(g.id, int.tryParse(c.text)??0); await _refreshGajiData(); if(ctx.mounted) Navigator.pop(ctx); }, child: const Text("Simpan")),
     ]));
   }
   void _dialogKasbon(BuildContext ctx, GajiMingguanData g, int now) async {
     final c = TextEditingController(text: now==0? "" : now.toString());
-    showDialog(context: context, builder: (_)=> AlertDialog(title: const Text("Box Potongan Kasbon"), content: TextField(controller:c, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText:"0 (kosong=0)", border: OutlineInputBorder())), actions:[
+    showDialog(context: context, builder: (_)=> AlertDialog(title: const Text("Box Potongan Kasbon - dari Live Dashboard"), content: TextField(controller:c, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText:"0 (kosong=0)", border: OutlineInputBorder())), actions:[
       TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text("Batal")),
       ElevatedButton(onPressed: () async { await db.inputPotonganKasbon(g.id, int.tryParse(c.text)??0); await _refreshGajiData(); if(ctx.mounted) Navigator.pop(ctx); }, child: const Text("Simpan")),
     ]));
@@ -115,11 +108,11 @@ class _GajiPageState extends State<GajiPage> {
       }),
       const SizedBox(height:12), const Text("Filter Status", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), const SizedBox(height:6),
       Wrap(spacing:8, children:[_chip("BELUM_GAJIAN","Belum Gajian",latte,setM), _chip("1 MINGGU","1 Minggu",cappuccino,setM), _chip("2 MINGGU","2 Minggu",americano,setM), _chip("LUNAS","Lunas",darkRoast,setM)]),
-      const SizedBox(height:12), const Text("Filter Kasbon", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), Wrap(spacing:8, children:[
+      const SizedBox(height:12), const Text("Filter Kasbon (Live Dashboard)", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), Wrap(spacing:8, children:[
         FilterChip(label: const Text("Ada Kasbon"), selected: _filterHanyaKasbon, selectedColor: americano.withOpacity(0.3), onSelected: (v){ setM(()=>_filterHanyaKasbon=v); setState(()=>_filterTanpaKasbon=false); }),
         FilterChip(label: const Text("Tidak Ada Kasbon"), selected: _filterTanpaKasbon, onSelected: (v){ setM(()=>_filterTanpaKasbon=v); setState(()=>_filterHanyaKasbon=false); }),
       ]),
-      const SizedBox(height:12), const Text("Filter Bonus", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), Wrap(spacing:8, children:[
+      const SizedBox(height:12), const Text("Filter Bonus (Rating Live)", style: TextStyle(fontWeight: FontWeight.bold, fontSize:13)), Wrap(spacing:8, children:[
         FilterChip(label: const Text("Ada Bonus"), selected: _filterHanyaBonus, selectedColor: cappuccino.withOpacity(0.3), onSelected: (v){ setM(()=>_filterHanyaBonus=v); setState(()=>_filterTanpaBonus=false); }),
         FilterChip(label: const Text("Tidak Ada Bonus"), selected: _filterTanpaBonus, onSelected: (v){ setM(()=>_filterTanpaBonus=v); setState(()=>_filterHanyaBonus=false); }),
       ]),
@@ -136,12 +129,20 @@ class _GajiPageState extends State<GajiPage> {
 
   @override Widget build(BuildContext context){
     return Scaffold(
-      appBar: AppBar(title: const Text("TB. SLAMET JAYA REKAP GAJI MINGGUAN"), backgroundColor: darkRoast, foregroundColor: Colors.white, actions:[
+      appBar: AppBar(title: const Text("TB. SLAMET JAYA REKAP GAJI MINGGUAN - LIVE DASHBOARD"), backgroundColor: darkRoast, foregroundColor: Colors.white, actions:[
         IconButton(icon: const Icon(Icons.sync), onPressed: _refreshGajiData),
         StreamBuilder<List<KaryawanData>>(stream: db.select(db.karyawan).watch(), builder: (c,s)=> IconButton(icon: const Icon(Icons.filter_list), onPressed: ()=>_showFilter(s.data??[]))),
       ]),
       body: Column(children:[
         if(_isLoadingProses) const LinearProgressIndicator(color: cappuccino),
+        // === LIVE DASHBOARD WIDGET - GajiPage baca Live ===
+        StreamBuilder<int>(stream: Stream.periodic(const Duration(seconds:1), (_)=> DateTime.now()).asyncMap((_)=> db.hitungGajiHariIni(DateTime.now())), builder: (c,gajiLiveSnap){
+          final bebanLive = gajiLiveSnap.data??0;
+          return Container(width: double.infinity, padding: const EdgeInsets.symmetric(horizontal:12, vertical:8), color: latte.withOpacity(0.5), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[
+            Text("Beban Gaji Live Dashboard Hari Ini: Rp ${fmt.format(bebanLive)}", style: TextStyle(fontSize:11, fontWeight: FontWeight.bold, color: darkRoast)),
+            Text("LIVE", style: TextStyle(fontSize:10, color: darkRoast, fontWeight: FontWeight.bold)),
+          ]));
+        }),
         StreamBuilder<List<GajiMingguanData>>(stream: (db.select(db.gajiMingguan)..orderBy([(t)=>OrderingTerm.desc(t.mingguMulai)])).watch(), builder: (c,snap){
           if(snap.hasError) return Center(child: Text("Error: ${snap.error}")); if(!snap.hasData) return const Center(child: CircularProgressIndicator());
           var all=snap.data??[];
@@ -149,7 +150,7 @@ class _GajiPageState extends State<GajiPage> {
           final lunasOnly=filtered.where((g)=>g.statusBayar=='LUNAS').toList(); final totalLunas=lunasOnly.fold<int>(0,(s,g)=>s+g.totalGaji);
           return Expanded(child: Column(children:[
             Container(margin: const EdgeInsets.all(8), padding: const EdgeInsets.symmetric(horizontal:14, vertical:10), decoration: BoxDecoration(color: latte.withOpacity(0.4), borderRadius: BorderRadius.circular(12), border: Border.all(color: darkRoast, width:1.2)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[
-              const Column(crossAxisAlignment: CrossAxisAlignment.start, children:[Text("Total Akumulasi Terbayar (Lunas):", style: TextStyle(fontWeight: FontWeight.bold, fontSize:12)), Text("Hanya status hijau Lunas", style: TextStyle(fontSize:10))]),
+              const Column(crossAxisAlignment: CrossAxisAlignment.start, children:[Text("Total Akumulasi Terbayar (Lunas):", style: TextStyle(fontWeight: FontWeight.bold, fontSize:12)), Text("Hanya status Lunas - dari Live Dashboard", style: TextStyle(fontSize:10))]),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children:[Text("Rp ${fmt.format(totalLunas)}", style: const TextStyle(fontWeight: FontWeight.bold)), Container(padding: const EdgeInsets.symmetric(horizontal:8, vertical:2), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: darkRoast)), child: Text("${lunasOnly.length} data Lunas", style: const TextStyle(fontSize:11)))])
             ])),
             Expanded(child: StreamBuilder<List<KaryawanData>>(stream: db.select(db.karyawan).watch(), builder: (c,karSnap){
@@ -166,22 +167,23 @@ class _GajiPageState extends State<GajiPage> {
                   return Card(elevation:2, margin: const EdgeInsets.symmetric(vertical:4), child: Container(decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border(left: BorderSide(color: col, width:6))), child: ExpansionTile(
                     title: Row(children:[CircleAvatar(backgroundColor: col.withOpacity(0.3), child: Text(nama[0].toUpperCase(), style: TextStyle(color: darkRoast))), const SizedBox(width:8), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children:[
                       Row(children:[Text(nama, style: const TextStyle(fontWeight: FontWeight.bold, fontSize:13)), const SizedBox(width:6), if(kas>0) Container(padding: const EdgeInsets.symmetric(horizontal:6, vertical:2), decoration: BoxDecoration(color: americano, borderRadius: BorderRadius.circular(4)), child: Text("KASBON", style: TextStyle(fontSize:9, color: _getTextColor(americano)))), const SizedBox(width:4), Container(padding: const EdgeInsets.symmetric(horizontal:6, vertical:2), decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(4)), child: Text(_getLabel(g.statusBayar), style: TextStyle(fontSize:9, color: _getTextColor(col), fontWeight: FontWeight.bold)))]),
-                      Text("Periode $periode • ${g.totalHariEfektif} Hari • ${_getLabel(g.statusBayar)}", style: const TextStyle(fontSize:11)),
+                      Text("Periode $periode • ${g.totalHariEfektif} Hari • ${_getLabel(g.statusBayar)} • Live Dashboard", style: const TextStyle(fontSize:11)),
                     ]))]),
                     trailing: Text("Rp ${fmt.format(bersih)}", style: TextStyle(fontWeight: FontWeight.bold, color: darkRoast)),
                     children:[Padding(padding: const EdgeInsets.all(16), child: Column(children:[
-                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[const Text("Gaji Pokok:"), Text("Rp ${fmt.format(g.totalGajiPokok)}")]), const SizedBox(height:8),
+                      // Form acuan lingkaran biru - semua karyawan sama - source Live Dashboard
+                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[const Text("Gaji Pokok (dari Absensi Live):"), Text("Rp ${fmt.format(g.totalGajiPokok)}")]), const SizedBox(height:8),
                       Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border(left: BorderSide(color: col, width:4))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children:[
-                        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[const Text("● Box Bonus Mingguan:", style: TextStyle(fontWeight: FontWeight.bold, fontSize:12)), Container(padding: const EdgeInsets.symmetric(horizontal:8, vertical:3), decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(12)), child: Text(g.bonusMingguan==0? "hijau kosong → 0" : "Rp ${fmt.format(g.bonusMingguan)}", style: TextStyle(fontSize:10, color: _getTextColor(col))))]),
+                        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[const Text("● Box Bonus Mingguan (Rating Live):", style: TextStyle(fontWeight: FontWeight.bold, fontSize:12)), Container(padding: const EdgeInsets.symmetric(horizontal:8, vertical:3), decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(12)), child: Text(g.bonusMingguan==0? "hijau kosong → 0" : "Rp ${fmt.format(g.bonusMingguan)}", style: TextStyle(fontSize:10, color: _getTextColor(col))))]),
                         const SizedBox(height:8), InkWell(onTap: ()=>_dialogBonus(context,g), child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(horizontal:12, vertical:10), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)), child: Text(g.bonusMingguan==0? "0" : fmt.format(g.bonusMingguan), style: TextStyle(color: g.bonusMingguan==0? Colors.grey : darkRoast)))),
                       ])),
                       const SizedBox(height:8),
                       Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border(left: BorderSide(color: col, width:4))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children:[
-                        const Text("● Box Potongan Kasbon:", style: TextStyle(fontWeight: FontWeight.bold, fontSize:12)), const SizedBox(height:8),
+                        const Text("● Box Potongan Kasbon (Live):", style: TextStyle(fontWeight: FontWeight.bold, fontSize:12)), const SizedBox(height:8),
                         InkWell(onTap: ()=>_dialogKasbon(context,g,kas), child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(horizontal:12, vertical:10), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)), child: Text(kas==0? "0" : fmt.format(kas), style: TextStyle(color: kas==0? Colors.grey : darkRoast)))),
                       ])),
                       const SizedBox(height:8),
-                      Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: darkRoast, borderRadius: BorderRadius.circular(8)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[const Column(crossAxisAlignment: CrossAxisAlignment.start, children:[Text("Total Diterima Bersih:", style: TextStyle(color: Color(0xFFE9D5B7), fontWeight: FontWeight.bold, fontSize:12)), Text("50rb + bonus - potongan (kosong=0)", style: TextStyle(color: Colors.white60, fontSize:10))]), Text("Rp ${fmt.format(bersih)}", style: const TextStyle(color: Color(0xFFE9D5B7), fontWeight: FontWeight.bold, fontSize:14))])),
+                      Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: darkRoast, borderRadius: BorderRadius.circular(8)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[const Column(crossAxisAlignment: CrossAxisAlignment.start, children:[Text("Total Diterima Bersih (Live):", style: TextStyle(color: Color(0xFFE9D5B7), fontWeight: FontWeight.bold, fontSize:12)), Text("pokok + bonus - kasbon (kosong=0)", style: TextStyle(color: Colors.white60, fontSize:10))]), Text("Rp ${fmt.format(bersih)}", style: const TextStyle(color: Color(0xFFE9D5B7), fontWeight: FontWeight.bold, fontSize:14))])),
                       const SizedBox(height:12),
                       Row(children:[
                         Expanded(child: ElevatedButton.icon(icon: const Icon(Icons.description, size:16), label: const Text("slip", style: TextStyle(fontSize:12)), style: ElevatedButton.styleFrom(backgroundColor: darkRoast, foregroundColor: Colors.white), onPressed: ()=>_printSlip(nama:nama, periode:periode, pokok:g.totalGajiPokok, bonus:g.bonusMingguan, kasbon:kas, total:bersih))),
