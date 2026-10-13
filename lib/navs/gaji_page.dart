@@ -69,20 +69,19 @@ class _GajiPageState extends State<GajiPage> {
     return bersih < 0 ? 0 : bersih;
   }
 
-  // RATING LIVE DARI DASHBOARD - AKUMULASI BINTANG
+  // FIX: RATING LIVE DARI DASHBOARD - AMAN TIDAK PAKAI db.rating
   Future<double> _getRatingLive(int karyawanId, DateTime start, DateTime end) async {
     try {
-      // coba beberapa nama method yang ada di DB kamu
-      // ganti sesuai DB asli, ini fallback aman
-      final list = await (db.select(db.rating ?? db.penilaian ?? db.absensi)..where((t) => t.karyawanId.equals(karyawanId))).get();
-      // filter periode start-end kalau ada field tanggal
-      if (list.isEmpty) return 0.0;
-      // hitung rata-rata
+      // TODO: ganti dengan method asli Dashboard kamu
+      // contoh: return await db.getRataRataRating(karyawanId, start, end);
+      // sementara ambil dari absensi jika ada kolom rating, kalau tidak return 0
+      final data = await db.getAbsensiPeriode(karyawanId, start, end);
+      if (data.isEmpty) return 0.0;
       double total = 0; int count = 0;
-      for (var r in list) {
+      for (var a in data) {
         try {
-          final v = (r as dynamic).rating ?? (r as dynamic).bintang ?? (r as dynamic).nilai ?? 0;
-          if (v != null) { total += (v as num).toDouble(); count++; }
+          final r = (a as dynamic).rating as double?;
+          if (r != null && r > 0) { total += r; count++; }
         } catch (_) {}
       }
       return count == 0 ? 0.0 : total / count;
@@ -98,40 +97,27 @@ class _GajiPageState extends State<GajiPage> {
     if (rating >= 3.5) return 10000;
     return 0;
   }
-
   String _bintangText(double rating) {
     if (rating == 0) return "Belum ada rating";
-    int full = rating.floor();
-    bool half = (rating - full) >= 0.5;
-    return "${'★' * full}${half ? '½' : ''} ${rating.toStringAsFixed(1)}";
+    return "${rating.toStringAsFixed(1)} ★";
   }
 
   Future<pw.Document> _pdf({required String nama, required String periode, required int pokok, required int bonus, required int kasbon, required int total, required double rating}) async {
     final pdf = pw.Document();
-    pdf.addPage(pw.Page(
-      pageFormat: PdfPageFormat.roll80,
-      margin: const pw.EdgeInsets.all(12),
-      build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        pw.Center(child: pw.Text("TB. SLAMET JAYA", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold))),
-        pw.Divider(),
-        pw.Text("Nama: $nama | Periode: $periode", style: const pw.TextStyle(fontSize: 9)),
-        pw.Text("Rating Live: ${rating.toStringAsFixed(1)} bintang", style: const pw.TextStyle(fontSize: 9)),
-        pw.Divider(),
-        pw.Text("Pokok Rp ${fmt.format(pokok)} + Bonus Manual Rp ${fmt.format(bonus)} - Kasbon Rp ${fmt.format(kasbon)} = Rp ${fmt.format(total)}", style: const pw.TextStyle(fontSize: 9)),
-      ]),
-    ));
+    pdf.addPage(pw.Page(pageFormat: PdfPageFormat.roll80, margin: const pw.EdgeInsets.all(12), build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+      pw.Center(child: pw.Text("TB. SLAMET JAYA", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold))),
+      pw.Divider(),
+      pw.Text("Nama: $nama | Periode: $periode | Rating: ${rating.toStringAsFixed(1)}", style: const pw.TextStyle(fontSize: 9)),
+      pw.Divider(),
+      pw.Text("Pokok Rp ${fmt.format(pokok)} + Bonus Manual Rp ${fmt.format(bonus)} - Kasbon Rp ${fmt.format(kasbon)} = Rp ${fmt.format(total)}", style: const pw.TextStyle(fontSize: 9)),
+    ])));
     return pdf;
   }
-
   Future<void> _shareWA({required String nama, required String periode, required int pokok, required int bonus, required int kasbon, required int total, required double rating}) async {
     final pdf = await _pdf(nama: nama, periode: periode, pokok: pokok, bonus: bonus, kasbon: kasbon, total: total, rating: rating);
-    final bytes = await pdf.save();
-    final dir = await getTemporaryDirectory();
-    final path = "${dir.path}/Slip_$nama.pdf";
-    await File(path).writeAsBytes(bytes);
+    final bytes = await pdf.save(); final dir = await getTemporaryDirectory(); final path = "${dir.path}/Slip_$nama.pdf"; await File(path).writeAsBytes(bytes);
     await Share.shareXFiles([XFile(path)], text: "*SLIP GAJI* $nama $periode Rating ${rating.toStringAsFixed(1)} Terima Rp ${fmt.format(total)}");
   }
-
   Future<void> _printSlip({required String nama, required String periode, required int pokok, required int bonus, required int kasbon, required int total, required double rating}) async {
     final pdf = await _pdf(nama: nama, periode: periode, pokok: pokok, bonus: bonus, kasbon: kasbon, total: total, rating: rating);
     await Printing.layoutPdf(onLayout: (f) async => pdf.save());
@@ -319,13 +305,12 @@ class _GajiPageState extends State<GajiPage> {
                         Padding(padding: const EdgeInsets.all(12), child: Column(children: [
                           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Gaji Pokok (Live):"), Text("Rp ${fmt.format(g.totalGajiPokok)}")]),
                           const SizedBox(height: 6),
-                          // BINTANG LIVE DARI DASHBOARD PER KARYAWAN
                           FutureBuilder<double>(future: _getRatingLive(g.karyawanId, g.mingguMulai, g.mingguSelesai), builder: (c, rateSnap) {
                             final rating = rateSnap.data?? 0.0;
                             final saran = _saranBonusDariRating(rating);
                             return Column(children: [
                               Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: caramel.withOpacity(0.12), borderRadius: BorderRadius.circular(10), border: Border.all(color: caramel.withOpacity(0.3))), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Rating Live Dashboard:", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)), Text(_bintangText(rating), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: coffee)), Text("${rating.toStringAsFixed(1)} dari akumulasi minggu ini", style: const TextStyle(fontSize: 10, color: Colors.grey))]),
+                                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Rating Live Dashboard:", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)), Text(_bintangText(rating), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: coffee)), Text("${rating.toStringAsFixed(1)} akumulasi minggu ini", style: const TextStyle(fontSize: 10, color: Colors.grey))]),
                                 Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: caramel, borderRadius: BorderRadius.circular(20)), child: Text("Saran Rp ${fmt.format(saran)}", style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold))),
                               ])),
                               const SizedBox(height: 8),
@@ -355,7 +340,7 @@ class _GajiPageState extends State<GajiPage> {
                           }),
                         ])),
                       ],
-                    ))));
+                    )));
                   }),
                 ]);
               });
