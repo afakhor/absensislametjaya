@@ -3,35 +3,13 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../dbases/localdatabase.dart';
 
 class BackupService {
   static final db = AppDatabase();
 
-  static Future<Directory> _getDownloadDir() async {
-    // Android 11+ wajib pakai ini, bukan hardcode /storage/emulated/0/Download
-    if (Platform.isAndroid) {
-      Directory? dir = await getDownloadsDirectory();
-      if (dir != null && await dir.exists()) return dir;
-      // fallback
-      dir = Directory('/storage/emulated/0/Download');
-      if (await dir.exists()) return dir;
-    }
-    return await getApplicationDocumentsDirectory();
-  }
-
   static Future<String?> exportBackup() async {
     try {
-      if (Platform.isAndroid) {
-        if (await Permission.manageExternalStorage.status.isDenied) {
-          await Permission.manageExternalStorage.request();
-        }
-        if (await Permission.storage.status.isDenied) {
-          await Permission.storage.request();
-        }
-      }
-
       final karyawan = await db.select(db.karyawan).get();
       final kategori = await db.select(db.kategoriKaryawan).get();
       final absensi = await db.select(db.absensi).get();
@@ -40,72 +18,63 @@ class BackupService {
       final kasbon = await db.select(db.kasbonHarian).get();
       final laporan = await db.select(db.laporanHarian).get();
 
-      final Map<String, dynamic> data = {
-        'versi': 1,
+      final data = {
+        'versi': 2,
         'tanggal': DateTime.now().toIso8601String(),
-        'kategoriKaryawan': kategori.map((e) => e.toJson()).toList(),
-        'karyawan': karyawan.map((e) => e.toJson()).toList(),
-        'absensi': absensi.map((e) => e.toJson()).toList(),
-        'bintangHarian': bintang.map((e) => e.toJson()).toList(),
-        'kasbonHarian': kasbon.map((e) => e.toJson()).toList(),
-        'gajiMingguan': gaji.map((e) => e.toJson()).toList(),
-        'laporanHarian': laporan.map((e) => e.toJson()).toList(),
+        'kategoriKaryawan': kategori,
+        'karyawan': karyawan,
+        'absensi': absensi,
+        'bintangHarian': bintang,
+        'kasbonHarian': kasbon,
+        'gajiMingguan': gaji,
+        'laporanHarian': laporan,
       };
 
-      final dir = await _getDownloadDir();
+      // Tulis ke Documents dulu (pasti bisa), baru copy ke Download
+      final docDir = await getApplicationDocumentsDirectory();
       final fileName = 'TB_SLAMET_JAYA_${DateTime.now().millisecondsSinceEpoch}.bskro';
-      final file = File('${dir.path}/$fileName');
       
-      await file.writeAsString(jsonEncode(data), flush: true);
+      final fileDoc = File('${docDir.path}/$fileName');
+      await fileDoc.writeAsString(jsonEncode(data));
 
-      // Biar muncul di file manager
-      if (await file.exists()) {
-        print('BACKUP SUKSES: ${file.path} - size: ${await file.length()}');
-        return file.path;
-      } else {
-        print('BACKUP GAGAL: file tidak tercipta');
-        return null;
-      }
-    } catch (e) {
-      print('Backup error $e');
+      // Coba copy ke Download biar keliatan di File Manager
+      try {
+        final downloadDir = Directory('/storage/emulated/0/Download');
+        if (await downloadDir.exists()) {
+          final fileDown = File('${downloadDir.path}/$fileName');
+          await fileDown.writeAsString(jsonEncode(data), flush: true);
+          print('BACKUP OK di Download: ${fileDown.path}');
+          return fileDown.path;
+        }
+      } catch (_) {}
+
+      print('BACKUP OK di Documents: ${fileDoc.path}');
+      return fileDoc.path;
+    } catch (e, s) {
+      print('Backup error $e $s');
       return null;
     }
   }
 
-  static Future<bool> importBackup() async {
+  // RETURN STRING BIAR TAU ERRORNYA, BUKAN BOOL
+  static Future<String> importBackup() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['bskro'],
-        withData: true,
+        withData: true, // WAJIB true di Android 13+
       );
-      if (result == null) return false;
+      if (result == null) return 'BATAL';
 
-      File file;
-      // Ambil file
-      if (result.files.single.path != null) {
-        file = File(result.files.single.path!);
+      String jsonStr;
+      if (result.files.single.bytes != null) {
+        jsonStr = utf8.decode(result.files.single.bytes!);
       } else {
-        final bytes = result.files.single.bytes;
-        if (bytes == null) throw Exception('Bytes null');
-        final dir = await _getDownloadDir();
-        final temp = File('${dir.path}/temp_restore.bskro');
-        await temp.writeAsBytes(bytes, flush: true);
-        file = temp;
+        final path = result.files.single.path!;
+        jsonStr = await File(path).readAsString();
       }
 
-      if (!await file.exists()) {
-        print('File tidak ada: ${file.path}');
-        throw Exception('File tidak ada');
-      }
-
-      final jsonStr = await file.readAsString();
       final Map<String, dynamic> json = jsonDecode(jsonStr);
-
-      // Validasi
-      if (!json.containsKey('karyawan') && !json.containsKey('kategoriKaryawan')) {
-        throw Exception('Format .bskro salah');
-      }
 
       await db.transaction(() async {
         await db.delete(db.gajiMingguan).go();
@@ -118,33 +87,31 @@ class BackupService {
 
         for (var m in (json['kategoriKaryawan'] ?? [])) {
           await db.into(db.kategoriKaryawan).insert(
-            KategoriKaryawanCompanion(
-              id: Value(m['id']),
-              namaKategori: Value(m['namaKategori']),
-              tarifPerHari: Value(m['tarifPerHari']),
+            KategoriKaryawanCompanion.insert(
+              namaKategori: m['namaKategori'] ?? m['nama'] ?? '',
+              tarifPerHari: (m['tarifPerHari'] ?? 0) as int,
+              id: Value(m['id'] as int? ?? 0),
             ),
             mode: InsertMode.insertOrReplace,
           );
         }
         for (var m in (json['karyawan'] ?? [])) {
           await db.into(db.karyawan).insert(
-            KaryawanCompanion(
-              id: Value(m['id']),
-              nama: Value(m['nama']),
-              kategoriId: Value(m['kategoriId']),
+            KaryawanCompanion.insert(
+              nama: m['nama'] ?? '',
+              kategoriId: (m['kategoriId'] ?? 1) as int,
               fotoPath: Value(m['fotoPath']),
+              id: Value(m['id'] as int? ?? 0),
             ),
             mode: InsertMode.insertOrReplace,
           );
         }
-        // TODO: lanjutkan absensi, bintang, kasbon, gaji, laporan sama seperti di atas
       });
 
-      print('RESTORE SUKSES dari ${file.path}');
-      return true;
-    } catch (e) {
-      print('Restore error: $e');
-      return false;
+      return 'SUKSES';
+    } catch (e, s) {
+      print('RESTORE FAIL $e $s');
+      return 'GAGAL: $e';
     }
   }
 }
