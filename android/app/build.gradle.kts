@@ -22,7 +22,7 @@ android {
         applicationId = "com.example.absensislametjaya"
         minSdk = 23
         targetSdk = 35
-        versionCode = 10
+        versionCode = 11
         versionName = "4.0.0"
         multiDexEnabled = true
     }
