@@ -11,11 +11,8 @@ class BackupService {
   static Map<String, dynamic> _fixMap(Map<String, dynamic> m) {
     final out = <String, dynamic>{};
     m.forEach((k, v) {
-      if (v is DateTime) {
-        out[k] = v.toIso8601String();
-      } else {
-        out[k] = v;
-      }
+      if (v is DateTime) out[k] = v.toIso8601String();
+      else out[k] = v;
     });
     return out;
   }
@@ -31,7 +28,7 @@ class BackupService {
       final laporan = await db.select(db.laporanHarian).get();
 
       final data = {
-        'versi': 4,
+        'versi': 5,
         'tanggal': DateTime.now().toIso8601String(),
         'kategoriKaryawan': kategori.map((e) => _fixMap(e.toJson())).toList(),
         'karyawan': karyawan.map((e) => _fixMap(e.toJson())).toList(),
@@ -72,16 +69,47 @@ class BackupService {
       if (result == null) return 'BATAL';
       final path = result.files.single.path;
       if (path == null) return 'GAGAL: path null';
-      if (!path.toLowerCase().endsWith('.bskro')) return 'GAGAL: Bukan.bskro';
 
+      // baca file
       String jsonStr;
+      bool isSqlite = false;
       try {
-        jsonStr = await File(path).readAsString();
-      } catch (_) {
         final bytes = await File(path).readAsBytes();
-        jsonStr = utf8.decode(bytes, allowMalformed: true);
+        final head = utf8.decode(bytes.take(20).toList(), allowMalformed: true);
+        if (head.startsWith('SQLite format 3')) {
+          isSqlite = true;
+        } else {
+          jsonStr = utf8.decode(bytes, allowMalformed: true);
+        }
+      } catch (_) {
+        return 'GAGAL: Tidak bisa baca file';
       }
 
+      // KASUS 1: File.bskro kamu ternyata DB mentah -> restore dengan copy DB
+      if (isSqlite) {
+        try {
+          await db.close();
+          final docs = await getApplicationDocumentsDirectory();
+          // drift_flutter simpan file dengan nama persis ini
+          final dbPath1 = File('${docs.path}/tb_slamet_jaya_v8_clean');
+          final dbPath2 = File('${docs.path}/tb_slamet_jaya_v8_clean.sqlite');
+
+          // copy timpa db utama
+          if (await dbPath1.exists()) {
+            await File(path).copy(dbPath1.path);
+          } else if (await dbPath2.exists()) {
+            await File(path).copy(dbPath2.path);
+          } else {
+            // kalau belum ada, copy ke kedua lokasi biar pasti
+            await File(path).copy(dbPath1.path);
+          }
+          return 'SUKSES RESTORE DB MENTAH - Restart aplikasi';
+        } catch (e) {
+          return 'GAGAL COPY DB: $e';
+        }
+      }
+
+      // KASUS 2: File JSON normal
       final Map<String, dynamic> json = jsonDecode(jsonStr);
 
       await db.transaction(() async {
