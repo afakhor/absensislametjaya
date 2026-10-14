@@ -108,19 +108,22 @@ class _OwnerPageState extends State<OwnerPage> {
     }
   }
 
-    Future<void> _handleRestore() async {
+      Future<void> _handleRestore() async {
     setState(() => _isBackupLoading = true);
-    final success = await BackupService.importBackup();
+    final hasil = await BackupService.importBackup();
     if (!mounted) return;
     setState(() => _isBackupLoading = false);
-    if (success) {
+    
+    if (hasil == 'SUKSES') {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: roast, content: const Text('Restore berhasil! Data ditimpa. Restart aplikasi.', style: TextStyle(color: Color(0xFFA87336)))),
+        const SnackBar(backgroundColor: Color(0xFF3B2011), content: Text('Restore berhasil! Data ditimpa.', style: TextStyle(color: Color(0xFFA87336)))),
       );
       setState(() {});
+    } else if (hasil == 'BATAL') {
+      return;
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Colors.red, content: Text('Restore gagal. Pastikan file .bskro dari folder Download')),
+        SnackBar(backgroundColor: Colors.red, content: Text(hasil)), // ini akan kasih tau error aslinya
       );
     }
   }
