@@ -118,7 +118,6 @@ class KasbonHarian extends Table {
   DateTimeColumn get tanggal => dateTime()();
   IntColumn get nominal => integer().withDefault(const Constant(0))();
   TextColumn get keterangan => text().withDefault(const Constant(''))();
-
   @override
   List<String> get customConstraints => ['UNIQUE(karyawan_id, tanggal)'];
 }
@@ -171,8 +170,7 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(laporanHarian, laporanHarian.piutangBaru);
             await m.addColumn(laporanHarian, laporanHarian.namaPelangganBon);
             await m.addColumn(laporanHarian, laporanHarian.kasbonKaryawan);
-            await m.addColumn(
-                laporanHarian, laporanHarian.saldoPiutangKemarin);
+            await m.addColumn(laporanHarian, laporanHarian.saldoPiutangKemarin);
             await m.addColumn(laporanHarian, laporanHarian.kasHariIni);
             await m.addColumn(laporanHarian, laporanHarian.totalPiutangAkhir);
           }
@@ -192,13 +190,13 @@ class AppDatabase extends _$AppDatabase {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
     final existing = await (select(bintangHarian)
-         ..where((t) => t.karyawanId.equals(karyawanId))
-         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
-         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
-       .getSingleOrNull();
+        ..where((t) => t.karyawanId.equals(karyawanId))
+        ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+        ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+      .getSingleOrNull();
     if (existing!= null) {
       await (update(bintangHarian)..where((t) => t.id.equals(existing.id)))
-         .write(BintangHarianCompanion(bintang: Value(rating)));
+        .write(BintangHarianCompanion(bintang: Value(rating)));
     } else {
       await into(bintangHarian).insert(
         BintangHarianCompanion.insert(
@@ -214,27 +212,27 @@ class AppDatabase extends _$AppDatabase {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
     return (select(bintangHarian)
-         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
-         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
-       .watch();
+        ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+        ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+      .watch();
   }
 
   Stream<LaporanHarianData?> watchLaporanHari(DateTime tgl) {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
     return (select(laporanHarian)
-         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
-         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
-       .watchSingleOrNull();
+        ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+        ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+      .watchSingleOrNull();
   }
 
   Future<int> hitungGajiHariIni(DateTime tgl) async {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
     final absensiList = await (select(absensi)
-         ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
-         ..where((t) => t.jamMasuk.isSmallerOrEqualValue(end)))
-       .get();
+        ..where((t) => t.jamMasuk.isBiggerOrEqualValue(start))
+        ..where((t) => t.jamMasuk.isSmallerOrEqualValue(end)))
+      .get();
     final listKategori = await select(kategoriKaryawan).get();
     final mapKategori = {for (var k in listKategori) k.id: k.tarifPerHari};
     final listKaryawan = await select(karyawan).get();
@@ -253,7 +251,6 @@ class AppDatabase extends _$AppDatabase {
     return totalGaji;
   }
 
-  // === FIX FINAL: PASTI NIMPA PER TANGGAL ===
   Future<void> simpanLaporanHarianFull({
     required DateTime tgl,
     required int omset,
@@ -273,14 +270,11 @@ class AppDatabase extends _$AppDatabase {
   }) async {
     final start = DateTime(tgl.year, tgl.month, tgl.day, 0, 0, 0);
     final end = DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59, 999);
-
     final existing = await (select(laporanHarian)
-         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
-         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
-       .getSingleOrNull();
-
+        ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
+        ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
+      .getSingleOrNull();
     if (existing!= null) {
-      // UPDATE = NIMPA
       await (update(laporanHarian)..where((t) => t.id.equals(existing.id))).write(
         LaporanHarianCompanion(
           totalPenjualan: Value(omset),
@@ -300,7 +294,6 @@ class AppDatabase extends _$AppDatabase {
         ),
       );
     } else {
-      // INSERT BARU
       await into(laporanHarian).insert(
         LaporanHarianCompanion.insert(
           tanggal: start,
@@ -328,10 +321,10 @@ class AppDatabase extends _$AppDatabase {
     final startOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day);
     final endOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day, 23, 59, 59, 999);
     final existing = await (select(kasbonHarian)
-         ..where((t) => t.karyawanId.equals(karyawanId))
-         ..where((t) => t.tanggal.isBiggerOrEqualValue(startOfDay))
-         ..where((t) => t.tanggal.isSmallerOrEqualValue(endOfDay)))
-       .getSingleOrNull();
+        ..where((t) => t.karyawanId.equals(karyawanId))
+        ..where((t) => t.tanggal.isBiggerOrEqualValue(startOfDay))
+        ..where((t) => t.tanggal.isSmallerOrEqualValue(endOfDay)))
+      .getSingleOrNull();
     if (existing!= null) {
       await (update(kasbonHarian)..where((t) => t.id.equals(existing.id))).write(
         KasbonHarianCompanion(nominal: Value(nominal), keterangan: Value(keterangan)),
@@ -352,8 +345,40 @@ class AppDatabase extends _$AppDatabase {
     final startOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day);
     final endOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day, 23, 59, 59, 999);
     return (select(kasbonHarian)
-         ..where((tbl) => tbl.tanggal.isBiggerOrEqualValue(startOfDay))
-         ..where((tbl) => tbl.tanggal.isSmallerOrEqualValue(endOfDay)))
-       .watch();
+        ..where((tbl) => tbl.tanggal.isBiggerOrEqualValue(startOfDay))
+        ..where((tbl) => tbl.tanggal.isSmallerOrEqualValue(endOfDay)))
+      .watch();
+  }
+
+  // ===== TAMBAHAN FIX 5 ERROR TADI =====
+  Future<void> tambahKategori(String nama, int tarif) async {
+    await into(kategoriKaryawan).insert(
+      KategoriKaryawanCompanion.insert(
+        namaKategori: nama,
+        tarifPerHari: tarif,
+      ),
+    );
+  }
+
+  Future<void> tambahKaryawan(String nama, int kategoriId, String? fotoPath) async {
+    await into(karyawan).insert(
+      KaryawanCompanion.insert(
+        nama: nama,
+        kategoriId: kategoriId,
+        fotoPath: Value(fotoPath),
+      ),
+    );
+  }
+
+  Stream<List<KategoriKaryawanData>> watchKategori() {
+    return select(kategoriKaryawan).watch();
+  }
+
+  Stream<List<KaryawanData>> watchKaryawan() {
+    return select(karyawan).watch();
+  }
+
+  Future<void> hapusKaryawan(int id) async {
+    await (delete(karyawan)..where((t) => t.id.equals(id))).go();
   }
 }
