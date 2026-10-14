@@ -31,7 +31,7 @@ android {
         applicationId = "com.example.absensislametjaya"
         minSdk = 23
         targetSdk = 35
-        versionCode = 13
+        versionCode = 14
         versionName = "4.0.1"
         multiDexEnabled = true
     }
