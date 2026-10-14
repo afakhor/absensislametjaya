@@ -2,18 +2,36 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../dbases/localdatabase.dart';
 
 class BackupService {
   static final db = AppDatabase();
 
+  static Future<Directory> _getDownloadDir() async {
+    // Android 11+ wajib pakai ini, bukan hardcode /storage/emulated/0/Download
+    if (Platform.isAndroid) {
+      Directory? dir = await getDownloadsDirectory();
+      if (dir != null && await dir.exists()) return dir;
+      // fallback
+      dir = Directory('/storage/emulated/0/Download');
+      if (await dir.exists()) return dir;
+    }
+    return await getApplicationDocumentsDirectory();
+  }
+
   static Future<String?> exportBackup() async {
     try {
       if (Platform.isAndroid) {
-        await Permission.storage.request();
-        await Permission.manageExternalStorage.request();
+        if (await Permission.manageExternalStorage.status.isDenied) {
+          await Permission.manageExternalStorage.request();
+        }
+        if (await Permission.storage.status.isDenied) {
+          await Permission.storage.request();
+        }
       }
+
       final karyawan = await db.select(db.karyawan).get();
       final kategori = await db.select(db.kategoriKaryawan).get();
       final absensi = await db.select(db.absensi).get();
@@ -34,47 +52,62 @@ class BackupService {
         'laporanHarian': laporan.map((e) => e.toJson()).toList(),
       };
 
-      Directory dir = Directory('/storage/emulated/0/Download');
-      if (!await dir.exists()) dir = Directory('/storage/emulated/0/Download');
+      final dir = await _getDownloadDir();
+      final fileName = 'TB_SLAMET_JAYA_${DateTime.now().millisecondsSinceEpoch}.bskro';
+      final file = File('${dir.path}/$fileName');
       
-      final file = File('${dir.path}/TB_SLAMET_JAYA_${DateTime.now().millisecondsSinceEpoch}.bskro');
       await file.writeAsString(jsonEncode(data), flush: true);
-      return file.path;
+
+      // Biar muncul di file manager
+      if (await file.exists()) {
+        print('BACKUP SUKSES: ${file.path} - size: ${await file.length()}');
+        return file.path;
+      } else {
+        print('BACKUP GAGAL: file tidak tercipta');
+        return null;
+      }
     } catch (e) {
       print('Backup error $e');
       return null;
     }
   }
 
-  // FIX RESTORE YANG GAGAL
   static Future<bool> importBackup() async {
     try {
-      // 1. Picker harus allow .bskro
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any, // jangan custom, biar kebaca di Download
-        allowMultiple: false,
+        type: FileType.custom,
+        allowedExtensions: ['bskro'],
+        withData: true,
       );
       if (result == null) return false;
 
       File file;
+      // Ambil file
       if (result.files.single.path != null) {
         file = File(result.files.single.path!);
       } else {
-        // Android 13+ bytes only
         final bytes = result.files.single.bytes;
-        if (bytes == null) return false;
-        final temp = File('/storage/emulated/0/Download/temp_restore.bskro');
-        await temp.writeAsBytes(bytes);
+        if (bytes == null) throw Exception('Bytes null');
+        final dir = await _getDownloadDir();
+        final temp = File('${dir.path}/temp_restore.bskro');
+        await temp.writeAsBytes(bytes, flush: true);
         file = temp;
       }
 
-      if (!await file.exists()) return false;
+      if (!await file.exists()) {
+        print('File tidak ada: ${file.path}');
+        throw Exception('File tidak ada');
+      }
+
       final jsonStr = await file.readAsString();
       final Map<String, dynamic> json = jsonDecode(jsonStr);
 
-      // 2. RESTORE - HAPUS DULU BARU INSERT (transaction biar adil)
+      // Validasi
+      if (!json.containsKey('karyawan') && !json.containsKey('kategoriKaryawan')) {
+        throw Exception('Format .bskro salah');
+      }
+
       await db.transaction(() async {
-        // hapus semua child dulu
         await db.delete(db.gajiMingguan).go();
         await db.delete(db.laporanHarian).go();
         await db.delete(db.kasbonHarian).go();
@@ -83,7 +116,6 @@ class BackupService {
         await db.delete(db.karyawan).go();
         await db.delete(db.kategoriKaryawan).go();
 
-        // insert kategori dulu (parent)
         for (var m in (json['kategoriKaryawan'] ?? [])) {
           await db.into(db.kategoriKaryawan).insert(
             KategoriKaryawanCompanion(
@@ -105,10 +137,10 @@ class BackupService {
             mode: InsertMode.insertOrReplace,
           );
         }
-        // ... lanjutkan untuk absensi, bintangHarian, kasbon, gajiMingguan, laporan
-        // pakai insertOrReplace biar id sama
+        // TODO: lanjutkan absensi, bintang, kasbon, gaji, laporan sama seperti di atas
       });
 
+      print('RESTORE SUKSES dari ${file.path}');
       return true;
     } catch (e) {
       print('Restore error: $e');
