@@ -8,8 +8,12 @@ jobs:
   build-android:
     name: 1. Build APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -18,10 +22,22 @@ jobs:
         with:
           flutter-version: '3.32.8'
           channel: 'stable'
+      - name: Generate Keystore if not exists
+        run: |
+          if [ ! -f android/app/upload-keystore.jks ]; then
+            echo "Keystore belum ada, bikin baru..."
+            keytool -genkey -v -keystore android/app/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass slametjaya123 -keypass slametjaya123 -dname "CN=TB Slamet Jaya, OU=TB, O=Slamet, L=Surabaya, S=Jatim, C=ID"
+            git config user.name "github-actions"
+            git config user.email "actions@github.com"
+            git add android/app/upload-keystore.jks
+            git commit -m "Add release keystore [skip ci]" || echo "nothing to commit"
+            git push
+          else
+            echo "Keystore sudah ada, pakai yang lama biar bisa timpa"
+          fi
       - name: Clean + Build
         run: |
           flutter clean
-          rm -rf ~/.pub-cache/hosted/pub.dev/flutter_blue_plus*
           flutter pub get
           dart run build_runner build --delete-conflicting-outputs
           flutter build apk --release --no-tree-shake-icons
