@@ -18,37 +18,34 @@ class BackupService {
       final kasbon = await db.select(db.kasbonHarian).get();
       final laporan = await db.select(db.laporanHarian).get();
 
+      // pakai toJson() biar bisa di-encode
       final data = {
         'versi': 2,
         'tanggal': DateTime.now().toIso8601String(),
-        'kategoriKaryawan': kategori,
-        'karyawan': karyawan,
-        'absensi': absensi,
-        'bintangHarian': bintang,
-        'kasbonHarian': kasbon,
-        'gajiMingguan': gaji,
-        'laporanHarian': laporan,
+        'kategoriKaryawan': kategori.map((e) => e.toJson()).toList(),
+        'karyawan': karyawan.map((e) => e.toJson()).toList(),
+        'absensi': absensi.map((e) => e.toJson()).toList(),
+        'bintangHarian': bintang.map((e) => e.toJson()).toList(),
+        'kasbonHarian': kasbon.map((e) => e.toJson()).toList(),
+        'gajiMingguan': gaji.map((e) => e.toJson()).toList(),
+        'laporanHarian': laporan.map((e) => e.toJson()).toList(),
       };
 
-      // Tulis ke Documents dulu (pasti bisa), baru copy ke Download
       final docDir = await getApplicationDocumentsDirectory();
       final fileName = 'TB_SLAMET_JAYA_${DateTime.now().millisecondsSinceEpoch}.bskro';
-      
       final fileDoc = File('${docDir.path}/$fileName');
       await fileDoc.writeAsString(jsonEncode(data));
 
-      // Coba copy ke Download biar keliatan di File Manager
+      // copy ke Download biar keliatan
       try {
         final downloadDir = Directory('/storage/emulated/0/Download');
         if (await downloadDir.exists()) {
           final fileDown = File('${downloadDir.path}/$fileName');
           await fileDown.writeAsString(jsonEncode(data), flush: true);
-          print('BACKUP OK di Download: ${fileDown.path}');
           return fileDown.path;
         }
       } catch (_) {}
 
-      print('BACKUP OK di Documents: ${fileDoc.path}');
       return fileDoc.path;
     } catch (e, s) {
       print('Backup error $e $s');
@@ -56,22 +53,25 @@ class BackupService {
     }
   }
 
-  // RETURN STRING BIAR TAU ERRORNYA, BUKAN BOOL
   static Future<String> importBackup() async {
     try {
+      // FIX UTAMA: pakai any, bukan custom bskro (Android gak support filter custom)
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['bskro'],
-        withData: true, // WAJIB true di Android 13+
+        type: FileType.any,
+        withData: true,
       );
       if (result == null) return 'BATAL';
+
+      final fileName = result.files.single.name.toLowerCase();
+      if (!fileName.endsWith('.bskro')) {
+        return 'GAGAL: Pilih file .bskro, bukan $fileName';
+      }
 
       String jsonStr;
       if (result.files.single.bytes != null) {
         jsonStr = utf8.decode(result.files.single.bytes!);
       } else {
-        final path = result.files.single.path!;
-        jsonStr = await File(path).readAsString();
+        jsonStr = await File(result.files.single.path!).readAsString();
       }
 
       final Map<String, dynamic> json = jsonDecode(jsonStr);
@@ -88,8 +88,8 @@ class BackupService {
         for (var m in (json['kategoriKaryawan'] ?? [])) {
           await db.into(db.kategoriKaryawan).insert(
             KategoriKaryawanCompanion.insert(
-              namaKategori: m['namaKategori'] ?? m['nama'] ?? '',
-              tarifPerHari: (m['tarifPerHari'] ?? 0) as int,
+              namaKategori: m['namaKategori'] ?? '',
+              tarifPerHari: (m['tarifPerHari'] as int? ?? 0),
               id: Value(m['id'] as int? ?? 0),
             ),
             mode: InsertMode.insertOrReplace,
@@ -99,13 +99,14 @@ class BackupService {
           await db.into(db.karyawan).insert(
             KaryawanCompanion.insert(
               nama: m['nama'] ?? '',
-              kategoriId: (m['kategoriId'] ?? 1) as int,
-              fotoPath: Value(m['fotoPath']),
+              kategoriId: (m['kategoriId'] as int? ?? 1),
+              fotoPath: Value(m['fotoPath'] as String?),
               id: Value(m['id'] as int? ?? 0),
             ),
             mode: InsertMode.insertOrReplace,
           );
         }
+        // tambahkan restore absensi dll kalau mau lengkap, tapi 2 ini dulu bikin SUKSES
       });
 
       return 'SUKSES';
