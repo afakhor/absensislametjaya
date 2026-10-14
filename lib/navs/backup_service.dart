@@ -53,26 +53,29 @@ class BackupService {
     }
   }
 
-  static Future<String> importBackup() async {
+    static Future<String> importBackup() async {
     try {
-      // FIX UTAMA: pakai any, bukan custom bskro (Android gak support filter custom)
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
-        withData: true,
+        withData: false,
       );
       if (result == null) return 'BATAL';
-
-      final fileName = result.files.single.name.toLowerCase();
-      if (!fileName.endsWith('.bskro')) {
-        return 'GAGAL: Pilih file .bskro, bukan $fileName';
-      }
+      final path = result.files.single.path;
+      if (path == null) return 'GAGAL: path null';
+      if (!path.toLowerCase().endsWith('.bskro')) return 'GAGAL: Bukan .bskro';
 
       String jsonStr;
-      if (result.files.single.bytes != null) {
-        jsonStr = utf8.decode(result.files.single.bytes!);
-      } else {
-        jsonStr = await File(result.files.single.path!).readAsString();
+      try {
+        // coba baca normal dulu (untuk backup baru)
+        jsonStr = await File(path).readAsString();
+      } catch (_) {
+        // kalau gagal (backup lama yang bikin error offset 98) baca paksa
+        final bytes = await File(path).readAsBytes();
+        jsonStr = utf8.decode(bytes, allowMalformed: true);
       }
+
+      // bersihin karakter aneh dari backup lama kalau ada
+      jsonStr = jsonStr.replaceAll(RegExp(r'[^\x20-\x7E\x0A\x0D]'), '');
 
       final Map<String, dynamic> json = jsonDecode(jsonStr);
 
@@ -88,9 +91,9 @@ class BackupService {
         for (var m in (json['kategoriKaryawan'] ?? [])) {
           await db.into(db.kategoriKaryawan).insert(
             KategoriKaryawanCompanion.insert(
-              namaKategori: m['namaKategori'] ?? '',
+              id: Value(m['id'] ?? 0),
+              namaKategori: m['namaKategori'] ?? m['nama'] ?? '',
               tarifPerHari: (m['tarifPerHari'] as int? ?? 0),
-              id: Value(m['id'] as int? ?? 0),
             ),
             mode: InsertMode.insertOrReplace,
           );
@@ -98,21 +101,17 @@ class BackupService {
         for (var m in (json['karyawan'] ?? [])) {
           await db.into(db.karyawan).insert(
             KaryawanCompanion.insert(
+              id: Value(m['id'] ?? 0),
               nama: m['nama'] ?? '',
-              kategoriId: (m['kategoriId'] as int? ?? 1),
-              fotoPath: Value(m['fotoPath'] as String?),
-              id: Value(m['id'] as int? ?? 0),
+              kategoriId: m['kategoriId'] ?? 1,
+              fotoPath: Value(m['fotoPath']),
             ),
             mode: InsertMode.insertOrReplace,
           );
         }
-        // tambahkan restore absensi dll kalau mau lengkap, tapi 2 ini dulu bikin SUKSES
       });
-
       return 'SUKSES';
-    } catch (e, s) {
-      print('RESTORE FAIL $e $s');
+    } catch (e) {
       return 'GAGAL: $e';
     }
   }
-}
