@@ -43,7 +43,6 @@ class BackupService {
       };
 
       final jsonString = jsonEncode(data);
-
       final docDir = await getApplicationDocumentsDirectory();
       final fileName = 'TB_SLAMET_JAYA_${DateTime.now().millisecondsSinceEpoch}.bskro';
       final fileDoc = File('${docDir.path}/$fileName');
@@ -57,7 +56,6 @@ class BackupService {
           return fileDown.path;
         }
       } catch (_) {}
-
       return fileDoc.path;
     } catch (e, s) {
       print('Backup error $e $s');
@@ -80,7 +78,6 @@ class BackupService {
       try {
         jsonStr = await File(path).readAsString();
       } catch (_) {
-        // FIX untuk backup lama yang error Unexpected extension byte
         final bytes = await File(path).readAsBytes();
         jsonStr = utf8.decode(bytes, allowMalformed: true);
       }
