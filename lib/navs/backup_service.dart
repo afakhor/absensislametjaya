@@ -94,11 +94,13 @@ class BackupService {
         await db.delete(db.kategoriKaryawan).go();
 
         for (var m in (json['kategoriKaryawan']?? [])) {
+          final tarifRaw = m['tarifPerHari'];
+          final tarif = tarifRaw is int? tarifRaw : int.tryParse(tarifRaw.toString())?? 0;
           await db.into(db.kategoriKaryawan).insert(
             KategoriKaryawanCompanion.insert(
               id: Value(m['id']?? 0),
               namaKategori: m['namaKategori']?? m['nama']?? '',
-              tarifPerHari: (m['tarifPerHari'] as int??? 0),
+              tarifPerHari: tarif,
             ),
             mode: InsertMode.insertOrReplace,
           );
