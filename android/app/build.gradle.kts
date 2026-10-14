@@ -18,18 +18,27 @@ android {
         jvmTarget = "1.8"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("upload-keystore.jks")
+            storePassword = "slametjaya123"
+            keyAlias = "upload"
+            keyPassword = "slametjaya123"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.example.absensislametjaya"
         minSdk = 23
         targetSdk = 35
-        versionCode = 11
-        versionName = "4.0.0"
+        versionCode = 12
+        versionName = "4.0.1"
         multiDexEnabled = true
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false
         }
