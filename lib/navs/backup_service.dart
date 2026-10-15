@@ -28,7 +28,7 @@ class BackupService {
       final laporan = await db.select(db.laporanHarian).get();
 
       final data = {
-        'versi': 5,
+        'versi': 6,
         'tanggal': DateTime.now().toIso8601String(),
         'kategoriKaryawan': kategori.map((e) => _fixMap(e.toJson())).toList(),
         'karyawan': karyawan.map((e) => _fixMap(e.toJson())).toList(),
@@ -62,54 +62,29 @@ class BackupService {
 
   static Future<String> importBackup() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        withData: false,
-      );
+      final result = await FilePicker.platform.pickFiles(type: FileType.any, withData: false);
       if (result == null) return 'BATAL';
       final path = result.files.single.path;
       if (path == null) return 'GAGAL: path null';
 
-      // baca file
-      String jsonStr;
-      bool isSqlite = false;
-      try {
-        final bytes = await File(path).readAsBytes();
-        final head = utf8.decode(bytes.take(20).toList(), allowMalformed: true);
-        if (head.startsWith('SQLite format 3')) {
-          isSqlite = true;
-        } else {
-          jsonStr = utf8.decode(bytes, allowMalformed: true);
-        }
-      } catch (_) {
-        return 'GAGAL: Tidak bisa baca file';
-      }
+      final bytes = await File(path).readAsBytes();
+      final head = utf8.decode(bytes.take(20).toList(), allowMalformed: true);
 
-      // KASUS 1: File.bskro kamu ternyata DB mentah -> restore dengan copy DB
-      if (isSqlite) {
+      // JIKA FILE.bskro ISINYA DB MENTAH
+      if (head.startsWith('SQLite format 3')) {
         try {
           await db.close();
           final docs = await getApplicationDocumentsDirectory();
-          // drift_flutter simpan file dengan nama persis ini
-          final dbPath1 = File('${docs.path}/tb_slamet_jaya_v8_clean');
-          final dbPath2 = File('${docs.path}/tb_slamet_jaya_v8_clean.sqlite');
-
-          // copy timpa db utama
-          if (await dbPath1.exists()) {
-            await File(path).copy(dbPath1.path);
-          } else if (await dbPath2.exists()) {
-            await File(path).copy(dbPath2.path);
-          } else {
-            // kalau belum ada, copy ke kedua lokasi biar pasti
-            await File(path).copy(dbPath1.path);
-          }
+          final dbFile = File('${docs.path}/tb_slamet_jaya_v8_clean');
+          await File(path).copy(dbFile.path);
           return 'SUKSES RESTORE DB MENTAH - Restart aplikasi';
         } catch (e) {
           return 'GAGAL COPY DB: $e';
         }
       }
 
-      // KASUS 2: File JSON normal
+      // FIX: jsonStr baru di-assign di sini, jadi gak error non-nullable lagi
+      final jsonStr = utf8.decode(bytes, allowMalformed: true);
       final Map<String, dynamic> json = jsonDecode(jsonStr);
 
       await db.transaction(() async {
@@ -122,32 +97,30 @@ class BackupService {
         await db.delete(db.kategoriKaryawan).go();
 
         for (var m in (json['kategoriKaryawan']?? [])) {
-          final tarifRaw = m['tarifPerHari'];
-          final tarif = tarifRaw is int? tarifRaw : int.tryParse(tarifRaw.toString())?? 0;
-          await db.into(db.kategoriKaryawan).insert(
-            KategoriKaryawanCompanion.insert(
-              id: Value(m['id']?? 0),
-              namaKategori: m['namaKategori']?? m['nama']?? '',
-              tarifPerHari: tarif,
-            ),
-            mode: InsertMode.insertOrReplace,
-          );
+          final tarif = m['tarifPerHari'] is int? m['tarifPerHari'] : int.tryParse(m['tarifPerHari'].toString())?? 0;
+          await db.into(db.kategoriKaryawan).insert(KategoriKaryawanCompanion.insert(id: Value(m['id']?? 0), namaKategori: m['namaKategori']?? '', tarifPerHari: tarif), mode: InsertMode.insertOrReplace);
         }
         for (var m in (json['karyawan']?? [])) {
-          await db.into(db.karyawan).insert(
-            KaryawanCompanion.insert(
-              id: Value(m['id']?? 0),
-              nama: m['nama']?? '',
-              kategoriId: m['kategoriId']?? 1,
-              fotoPath: Value(m['fotoPath']),
-            ),
-            mode: InsertMode.insertOrReplace,
-          );
+          await db.into(db.karyawan).insert(KaryawanCompanion.insert(id: Value(m['id']?? 0), nama: m['nama']?? '', kategoriId: m['kategoriId']?? 1, fotoPath: Value(m['fotoPath'])), mode: InsertMode.insertOrReplace);
+        }
+        for (var m in (json['absensi']?? [])) {
+          await db.into(db.absensi).insert(AbsensiCompanion.insert(id: Value(m['id']?? 0), karyawanId: m['karyawanId']?? 0, tanggal: DateTime.tryParse(m['tanggal'].toString())?? DateTime.now(), tipe: m['tipe']?? 'masuk'), mode: InsertMode.insertOrReplace);
+        }
+        for (var m in (json['bintangHarian']?? [])) {
+          await db.into(db.bintangHarian).insert(BintangHarianCompanion.insert(id: Value(m['id']?? 0), karyawanId: m['karyawanId']?? 0, tanggal: DateTime.tryParse(m['tanggal'].toString())?? DateTime.now(), bintang: m['bintang']?? 0), mode: InsertMode.insertOrReplace);
+        }
+        for (var m in (json['kasbonHarian']?? [])) {
+          await db.into(db.kasbonHarian).insert(KasbonHarianCompanion.insert(id: Value(m['id']?? 0), karyawanId: m['karyawanId']?? 0, tanggal: DateTime.tryParse(m['tanggal'].toString())?? DateTime.now(), jumlah: m['jumlah']?? 0), mode: InsertMode.insertOrReplace);
+        }
+        for (var m in (json['laporanHarian']?? [])) {
+          await db.into(db.laporanHarian).insert(LaporanHarianCompanion.insert(id: Value(m['id']?? 0), tanggal: DateTime.tryParse(m['tanggal'].toString())?? DateTime.now(), catatan: Value(m['catatan']?? '')), mode: InsertMode.insertOrReplace);
+        }
+        for (var m in (json['gajiMingguan']?? [])) {
+          await db.into(db.gajiMingguan).insert(GajiMingguanCompanion.insert(id: Value(m['id']?? 0), mingguKe: m['mingguKe']?? 0, tahun: m['tahun']?? DateTime.now().year), mode: InsertMode.insertOrReplace);
         }
       });
       return 'SUKSES';
     } catch (e) {
-      print('RESTORE FAIL $e');
       return 'GAGAL: $e';
     }
   }
