@@ -389,14 +389,20 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // Bersihkan ID:0 (data hantu)
-  Future<int> bersihkanIdNol() async {
+    Future<int> bersihkanIdNol() async {
     int total = 0;
     total += await (delete(absensi)..where((t) => t.karyawanId.equals(0))).go();
-    total += await customStatement('DELETE FROM absensi WHERE karyawan_id NOT IN (SELECT id FROM karyawan)');
     total += await (delete(gajiMingguan)..where((t) => t.karyawanId.equals(0))).go();
-    total += await customStatement('DELETE FROM gaji_mingguan WHERE karyawan_id NOT IN (SELECT id FROM karyawan)');
     total += await (delete(bintangHarian)..where((t) => t.karyawanId.equals(0))).go();
     total += await (delete(kasbonHarian)..where((t) => t.karyawanId.equals(0))).go();
+    // hapus orphan (karyawan_id yang gak ada di tabel karyawan) tanpa customStatement
+    final validIds = (await select(karyawan).get()).map((e) => e.id).toSet();
+    if (validIds.isNotEmpty) {
+      total += await (delete(absensi)..where((t) => t.karyawanId.isNotIn(validIds.toList()))).go();
+      total += await (delete(gajiMingguan)..where((t) => t.karyawanId.isNotIn(validIds.toList()))).go();
+      total += await (delete(bintangHarian)..where((t) => t.karyawanId.isNotIn(validIds.toList()))).go();
+      total += await (delete(kasbonHarian)..where((t) => t.karyawanId.isNotIn(validIds.toList()))).go();
+    }
     return total;
   }
 }
