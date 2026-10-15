@@ -23,7 +23,6 @@ class _OwnerPageState extends State<OwnerPage> {
   File? _selectedImage;
   bool _isBackupLoading = false;
 
-  // PALETTE BARU SESUAI GAMBAR KAMU (Tanpa Espresso)
   static const caramel = Color(0xFFA87336);
   static const cinnamon = Color(0xFF8F5D2E);
   static const mediumBrown = Color(0xFF7A4B26);
@@ -33,7 +32,7 @@ class _OwnerPageState extends State<OwnerPage> {
 
   Future<void> _pickImage(ImageSource source) async {
     final XFile? image = await _picker.pickImage(source: source, imageQuality: 70);
-    if (image!= null) setState(() => _selectedImage = File(image.path));
+    if (image != null) setState(() => _selectedImage = File(image.path));
   }
 
   void _showImageSourceModal() {
@@ -53,7 +52,7 @@ class _OwnerPageState extends State<OwnerPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Isi nama & tarif!')));
       return;
     }
-    await db.tambahKategori(_kategoriController.text.trim(), int.tryParse(_tarifController.text.trim())?? 0);
+    await db.tambahKategori(_kategoriController.text.trim(), int.tryParse(_tarifController.text.trim()) ?? 0);
     _kategoriController.clear(); _tarifController.clear();
     setState((){});
   }
@@ -67,6 +66,44 @@ class _OwnerPageState extends State<OwnerPage> {
     setState(() { _namaKaryawanController.clear(); _selectedKategori = null; _selectedImage = null; });
   }
 
+  // DIALOG PINDAH KATEGORI - NAIK/TURUN LEVEL
+  void _dialogPindahKategori(KaryawanData kar) {
+    int? selectedKatId = kar.kategoriId;
+    showDialog(context: context, builder: (ctx) {
+      return AlertDialog(
+        title: Text("Pindah Level ${kar.nama}", style: TextStyle(color: roast, fontWeight: FontWeight.bold, fontSize: 14)),
+        content: StreamBuilder<List<KategoriKaryawanData>>(
+          stream: db.watchKategori(),
+          builder: (c, snap) {
+            final cats = snap.data ?? [];
+            return DropdownButtonFormField<int>(
+              value: selectedKatId,
+              decoration: InputDecoration(labelText: 'Pilih Kategori Baru', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+              items: cats.map((e) => DropdownMenuItem(value: e.id, child: Text('${e.namaKategori} - Rp ${fmt.format(e.tarifPerHari)}'))).toList(),
+              onChanged: (v) => selectedKatId = v,
+            );
+          }
+        ),
+        actions: [
+          TextButton(onPressed: ()=> Navigator.pop(ctx), child: Text("Batal", style: TextStyle(color: cinnamon))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: roast),
+            onPressed: () async {
+              if (selectedKatId != null && selectedKatId != kar.kategoriId) {
+                await db.pindahKategoriKaryawan(kar.id, selectedKatId!);
+                if (ctx.mounted) Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("${kar.nama} pindah kategori, gaji minggu ini pakai tarif baru"), backgroundColor: roast)
+                );
+              }
+            },
+            child: Text("Pindahkan", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      );
+    });
+  }
+
   Future<void> _handleBackup() async {
     if (_isBackupLoading) return;
     setState(() => _isBackupLoading = true);
@@ -74,8 +111,8 @@ class _OwnerPageState extends State<OwnerPage> {
     if (!mounted) return;
     setState(() => _isBackupLoading = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: path!= null? roast : Colors.red,
-      content: Text(path!= null? 'Backup OK: $path' : 'Gagal backup'),
+      backgroundColor: path != null ? roast : Colors.red,
+      content: Text(path != null ? 'Backup OK: $path' : 'Gagal backup'),
     ));
   }
 
@@ -85,10 +122,10 @@ class _OwnerPageState extends State<OwnerPage> {
     if (!mounted) return;
     setState(() => _isBackupLoading = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: hasil == 'SUKSES'? roast : Colors.red,
-      content: Text(hasil == 'SUKSES'? 'Restore berhasil! Restart halaman.' : hasil),
+      backgroundColor: hasil.contains('SUKSES') ? roast : Colors.red,
+      content: Text(hasil),
     ));
-    if (hasil == 'SUKSES') setState(() {});
+    if (hasil.contains('SUKSES')) setState(() {});
   }
 
   Widget _sectionCard({required String title, required List<Widget> children}) {
@@ -116,7 +153,6 @@ class _OwnerPageState extends State<OwnerPage> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
-          // HEADER GRADIENT
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
@@ -125,19 +161,30 @@ class _OwnerPageState extends State<OwnerPage> {
             ),
             child: Row(children: [
               Expanded(child: ElevatedButton.icon(
-                onPressed: _isBackupLoading? null : _handleBackup,
+                onPressed: _isBackupLoading ? null : _handleBackup,
                 icon: const Icon(Icons.cloud_upload, size: 18),
                 label: const Text('Backup'),
                 style: ElevatedButton.styleFrom(backgroundColor: caramel, foregroundColor: Colors.white),
               )),
               const SizedBox(width: 10),
               Expanded(child: ElevatedButton.icon(
-                onPressed: _isBackupLoading? null : _handleRestore,
+                onPressed: _isBackupLoading ? null : _handleRestore,
                 icon: const Icon(Icons.cloud_download, size: 18),
                 label: const Text('Restore'),
                 style: ElevatedButton.styleFrom(backgroundColor: cream, foregroundColor: roast),
               )),
             ]),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final jml = await db.bersihkanIdNol();
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Dibersihkan $jml data ID:0"), backgroundColor: roast));
+              setState((){});
+            },
+            icon: Icon(Icons.cleaning_services),
+            label: Text("Bersihkan ID:0 (jika masih ada)"),
+            style: ElevatedButton.styleFrom(backgroundColor: mediumBrown, foregroundColor: Colors.white),
           ),
           const SizedBox(height: 16),
           _sectionCard(title: 'TAMBAH KATEGORI / JABATAN', children: [
@@ -149,14 +196,14 @@ class _OwnerPageState extends State<OwnerPage> {
           ]),
           _sectionCard(title: 'TAMBAH KARYAWAN', children: [
             Center(child: GestureDetector(onTap: _showImageSourceModal, child: Stack(alignment: Alignment.bottomRight, children: [
-              CircleAvatar(radius: 40, backgroundColor: caramel.withOpacity(0.2), backgroundImage: _selectedImage!= null? FileImage(_selectedImage!) : null, child: _selectedImage == null? const Icon(Icons.person, size: 40, color: cinnamon) : null),
+              CircleAvatar(radius: 40, backgroundColor: caramel.withOpacity(0.2), backgroundImage: _selectedImage != null ? FileImage(_selectedImage!) : null, child: _selectedImage == null ? const Icon(Icons.person, size: 40, color: cinnamon) : null),
               const CircleAvatar(radius: 14, backgroundColor: roast, child: Icon(Icons.camera_alt, size: 14, color: Colors.white)),
             ]))),
             const SizedBox(height: 12),
             TextField(controller: _namaKaryawanController, decoration: InputDecoration(labelText: 'Nama Karyawan', filled: true, fillColor: cream, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
             const SizedBox(height: 10),
             StreamBuilder<List<KategoriKaryawanData>>(stream: db.watchKategori(), builder: (context, snap) {
-              final cats = snap.data?? [];
+              final cats = snap.data ?? [];
               return DropdownButtonFormField<KategoriKaryawanData>(
                 value: _selectedKategori,
                 decoration: InputDecoration(labelText: 'Pilih Kategori', filled: true, fillColor: cream, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
@@ -167,11 +214,20 @@ class _OwnerPageState extends State<OwnerPage> {
             const SizedBox(height: 12),
             SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _simpanKaryawan, style: ElevatedButton.styleFrom(backgroundColor: coffee, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Simpan Karyawan'))),
           ]),
-          _sectionCard(title: 'DAFTAR KARYAWAN', children: [
+          _sectionCard(title: 'DAFTAR KARYAWAN - TAP UNTUK PINDAH LEVEL', children: [
             StreamBuilder<List<KaryawanData>>(stream: db.watchKaryawan(), builder: (context, snap) {
-              final list = snap.data?? [];
+              final list = snap.data ?? [];
               if (list.isEmpty) return const Text('Belum ada karyawan', style: TextStyle(color: cinnamon));
-              return Column(children: list.map((e) => ListTile(leading: CircleAvatar(backgroundColor: caramel.withOpacity(0.3), child: Text(e.nama[0].toUpperCase(), style: const TextStyle(color: roast))), title: Text(e.nama, style: const TextStyle(color: roast, fontWeight: FontWeight.w600)), trailing: IconButton(icon: const Icon(Icons.delete, color: cinnamon), onPressed: () => db.hapusKaryawan(e.id)))).toList());
+              return Column(children: list.map((e) => ListTile(
+                leading: CircleAvatar(backgroundColor: caramel.withOpacity(0.3), backgroundImage: e.fotoPath != null && File(e.fotoPath!).existsSync() ? FileImage(File(e.fotoPath!)) : null, child: e.fotoPath == null ? Text(e.nama[0].toUpperCase(), style: const TextStyle(color: roast)) : null),
+                title: Text(e.nama, style: const TextStyle(color: roast, fontWeight: FontWeight.w600)),
+                subtitle: Text("Tap untuk pindah kategori", style: TextStyle(fontSize: 10, color: cinnamon)),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(icon: const Icon(Icons.swap_horiz, color: coffee), tooltip: "Pindah Kategori", onPressed: () => _dialogPindahKategori(e)),
+                  IconButton(icon: const Icon(Icons.delete, color: cinnamon), onPressed: () => db.hapusKaryawan(e.id)),
+                ]),
+                onTap: () => _dialogPindahKategori(e),
+              )).toList());
             }),
           ]),
         ]),
