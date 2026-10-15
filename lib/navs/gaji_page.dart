@@ -69,7 +69,6 @@ class _GajiPageState extends State<GajiPage> {
     return bersih < 0 ? 0 : bersih;
   }
 
-  // FIX UTAMA: AMBIL BINTANG DARI TABEL YANG SAMA DENGAN DASHBOARD
   Future<double> _getRatingLive(int karyawanId, DateTime start, DateTime end) async {
     try {
       final startDay = DateTime(start.year, start.month, start.day);
@@ -224,6 +223,10 @@ class _GajiPageState extends State<GajiPage> {
     return FilterChip(label: Text(label, style: TextStyle(color: sel? _text(col) : roast, fontSize: 12, fontWeight: FontWeight.bold)), selected: sel, backgroundColor: col.withOpacity(0.2), selectedColor: col, onSelected: (v) { setM(() => v? _selectedStatusColors.add(val) : _selectedStatusColors.remove(val)); setState(() {}); });
   }
 
+  DateTime _monday(DateTime d) {
+    return DateTime(d.year, d.month, d.day - (d.weekday - 1));
+  }
+
   @override Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("REKAP GAJI KARYAWAN"), backgroundColor: roast, foregroundColor: Colors.white, actions: [
@@ -236,18 +239,21 @@ class _GajiPageState extends State<GajiPage> {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           var all = snap.data?? [];
           var filtered = all.where((g) {
-            if (_selectedDateRange!= null) {
-              if (g.mingguMulai.isBefore(_selectedDateRange!.start) || g.mingguSelesai.isAfter(_selectedDateRange!.end)) return false;
+            // FIX PERIODE: cek overlap, bukan exact
+            if (_selectedDateRange != null) {
+              final s = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
+              final e = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day, 23, 59, 59);
+              if (g.mingguSelesai.isBefore(s) || g.mingguMulai.isAfter(e)) return false;
             }
-            if (_selectedKaryawanIds.isNotEmpty &&!_selectedKaryawanIds.contains(g.karyawanId)) return false;
-            if (_selectedStatusColors.isNotEmpty &&!_selectedStatusColors.contains(g.statusBayar)) return false;
+            if (_selectedKaryawanIds.isNotEmpty && !_selectedKaryawanIds.contains(g.karyawanId)) return false;
+            if (_selectedStatusColors.isNotEmpty && !_selectedStatusColors.contains(g.statusBayar)) return false;
             return true;
           }).toList();
           if (_sortByTerbanyak) filtered.sort((a, b) => b.totalGaji.compareTo(a.totalGaji));
 
           final now = DateTime.now();
-          final startWeek = DateTime(2026, 10, 12);
-          final endWeek = DateTime(2026, 10, 18, 23, 59, 59);
+          final startWeek = _monday(now);
+          final endWeek = DateTime(startWeek.year, startWeek.month, startWeek.day + 6, 23, 59, 59);
           final startMonth = DateTime(now.year, now.month, 1);
           final endMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
 
@@ -262,8 +268,8 @@ class _GajiPageState extends State<GajiPage> {
               }(), builder: (c, kasMapSnap) {
                 final kasMap = kasMapSnap.data?? {};
                 int bersih(GajiMingguanData g) => _bersihAdil(pokok: g.totalGajiPokok, bonus: g.bonusMingguan, kasbon: kasMap[g.id]?? 0);
-                final mingguList = all.where((g) =>!g.mingguMulai.isBefore(startWeek) &&!g.mingguSelesai.isAfter(endWeek)).toList();
-                final bulanList = all.where((g) =>!g.mingguMulai.isBefore(startMonth) &&!g.mingguSelesai.isAfter(endMonth)).toList();
+                final mingguList = all.where((g) => !g.mingguMulai.isBefore(startWeek) && !g.mingguSelesai.isAfter(endWeek)).toList();
+                final bulanList = all.where((g) => !g.mingguMulai.isBefore(startMonth) && !g.mingguSelesai.isAfter(endMonth)).toList();
                 final totalMinggu = mingguList.fold<int>(0, (s, g) => s + bersih(g));
                 final totalBulan = bulanList.fold<int>(0, (s, g) => s + bersih(g));
                 final totalAwal = all.fold<int>(0, (s, g) => s + bersih(g));
@@ -274,9 +280,9 @@ class _GajiPageState extends State<GajiPage> {
                   SliverToBoxAdapter(child: Column(children: [
                     if (_isLoading) const LinearProgressIndicator(color: caramel),
                     Container(width: double.infinity, margin: const EdgeInsets.all(8), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: caramel.withOpacity(0.25), borderRadius: BorderRadius.circular(12), border: Border.all(color: caramel)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Beban Gaji Hari Ini: Rp ${fmt.format(bebanLive)}", style: TextStyle(fontWeight: FontWeight.bold, color: roast, fontSize: 11)), const Text("LIVE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))])),
-                    Container(margin: const EdgeInsets.fromLTRB(8, 0, 8, 6), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: caramel.withOpacity(0.2), borderRadius: BorderRadius.circular(12), border: Border.all(color: caramel)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("PERIODE SENIN-MINGGU INI", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)), Text("12-18 OCT 2026", style: TextStyle(fontWeight: FontWeight.bold, color: roast))]), Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: coffee, borderRadius: BorderRadius.circular(20)), child: const Text("AKTIF", style: TextStyle(color: Colors.white, fontSize: 11)))])),
-                    Container(margin: const EdgeInsets.fromLTRB(8, 0, 8, 6), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border(left: BorderSide(color: caramel, width: 6))), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Minggu Ini • ${mingguList.length} karyawan\n12-18 Oct live", style: const TextStyle(fontSize: 12)), Text("Rp ${fmt.format(totalMinggu)}", style: TextStyle(fontWeight: FontWeight.bold, color: coffee))])),
-                    Container(margin: const EdgeInsets.fromLTRB(8, 0, 8, 6), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border(left: BorderSide(color: coffee, width: 6))), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Bulan Ini Oct 2026\n01-13 Oct", style: const TextStyle(fontSize: 12)), Text("Rp ${fmt.format(totalBulan)}", style: TextStyle(fontWeight: FontWeight.bold, color: espresso))])),
+                    Container(margin: const EdgeInsets.fromLTRB(8, 0, 8, 6), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: caramel.withOpacity(0.2), borderRadius: BorderRadius.circular(12), border: Border.all(color: caramel)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("PERIODE SENIN-MINGGU INI", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)), Text("${DateFormat('dd').format(startWeek)}-${DateFormat('dd MMM yyyy').format(endWeek)}".toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, color: roast))]), Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: coffee, borderRadius: BorderRadius.circular(20)), child: const Text("AKTIF", style: TextStyle(color: Colors.white, fontSize: 11)))])),
+                    Container(margin: const EdgeInsets.fromLTRB(8, 0, 8, 6), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border(left: BorderSide(color: caramel, width: 6))), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Minggu Ini • ${mingguList.length} karyawan\n${DateFormat('dd-MM').format(startWeek)} live", style: const TextStyle(fontSize: 12)), Text("Rp ${fmt.format(totalMinggu)}", style: TextStyle(fontWeight: FontWeight.bold, color: coffee))])),
+                    Container(margin: const EdgeInsets.fromLTRB(8, 0, 8, 6), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border(left: BorderSide(color: coffee, width: 6))), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Bulan Ini ${DateFormat('MMM yyyy').format(now)}\n${DateFormat('dd').format(startMonth)}-${DateFormat('dd MMM').format(endMonth)}", style: const TextStyle(fontSize: 12)), Text("Rp ${fmt.format(totalBulan)}", style: TextStyle(fontWeight: FontWeight.bold, color: espresso))])),
                     Container(margin: const EdgeInsets.fromLTRB(8, 0, 8, 6), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border(left: BorderSide(color: espresso, width: 6))), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Dari Awal\nAPK Terinstall", style: TextStyle(fontSize: 12)), Text("Rp ${fmt.format(totalAwal)}", style: TextStyle(fontWeight: FontWeight.bold, color: roast))])),
                     Container(margin: const EdgeInsets.fromLTRB(8, 0, 8, 8), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: roast, borderRadius: BorderRadius.circular(12)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Total Akumulasi Terbayar (Lunas)", style: TextStyle(color: Color(0xFFA87336), fontSize: 11)), Text("Rp ${fmt.format(totalLunas)} • ${lunas.length} Lunas", style: const TextStyle(color: Color(0xFFA87336), fontWeight: FontWeight.bold))])),
                   ])),
