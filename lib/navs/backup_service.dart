@@ -76,13 +76,39 @@ class BackupService {
       final bytes = await File(path).readAsBytes();
       final head = utf8.decode(bytes.take(20).toList(), allowMalformed: true);
 
+      // FIX LANGKAH 3 SUKSES TAPI 4 NOL
       if (head.startsWith('SQLite format 3')) {
         try {
           await db.close();
           final docs = await getApplicationDocumentsDirectory();
-          final dbFile = File('${docs.path}/tb_slamet_jaya_v8_clean');
-          await File(path).copy(dbFile.path);
-          return 'SUKSES RESTORE DB MENTAH - Restart aplikasi';
+          final support = await getApplicationSupportDirectory();
+
+          final possiblePaths = [
+            '${docs.path}/tb_slamet_jaya_v8_clean',
+            '${docs.path}/tb_slamet_jaya_v8_clean.sqlite',
+            '${support.path}/tb_slamet_jaya_v8_clean',
+            '${support.path}/tb_slamet_jaya_v8_clean.sqlite',
+          ];
+
+          // Hapus wal/shm biar gak baca data kosong lama
+          for (var p in possiblePaths) {
+            try {
+              final wal = File('$p-wal');
+              final shm = File('$p-shm');
+              final dbf = File(p);
+              if (await wal.exists()) await wal.delete();
+              if (await shm.exists()) await shm.delete();
+              if (await dbf.exists()) await dbf.delete();
+            } catch (_) {}
+          }
+
+          // Copy ke semua lokasi biar pasti kebaca
+          await File(path).copy('${docs.path}/tb_slamet_jaya_v8_clean');
+          try {
+            await File(path).copy('${support.path}/tb_slamet_jaya_v8_clean');
+          } catch (_) {}
+
+          return 'SUKSES RESTORE DB MENTAH - Tutup total app dari recent apps, lalu buka lagi';
         } catch (e) {
           return 'GAGAL COPY DB: $e';
         }
