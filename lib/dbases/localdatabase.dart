@@ -194,7 +194,7 @@ class AppDatabase extends _$AppDatabase {
         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
       .getSingleOrNull();
-    if (existing!= null) {
+    if (existing != null) {
       await (update(bintangHarian)..where((t) => t.id.equals(existing.id)))
         .write(BintangHarianCompanion(bintang: Value(rating)));
     } else {
@@ -240,7 +240,7 @@ class AppDatabase extends _$AppDatabase {
     int totalGaji = 0;
     for (var abs in absensiList) {
       final katId = mapKaryawan[abs.karyawanId];
-      final tarif = mapKategori[katId]?? 0;
+      final tarif = mapKategori[katId] ?? 0;
       final tipe = abs.tipeKerja.toUpperCase().trim();
       if (tipe == 'HALF' || tipe == 'HALF_DAY' || tipe == 'SETENGAH' || tipe == '½ HARI') {
         totalGaji += (tarif / 2).round();
@@ -274,7 +274,7 @@ class AppDatabase extends _$AppDatabase {
         ..where((t) => t.tanggal.isBiggerOrEqualValue(start))
         ..where((t) => t.tanggal.isSmallerOrEqualValue(end)))
       .getSingleOrNull();
-    if (existing!= null) {
+    if (existing != null) {
       await (update(laporanHarian)..where((t) => t.id.equals(existing.id))).write(
         LaporanHarianCompanion(
           totalPenjualan: Value(omset),
@@ -315,7 +315,6 @@ class AppDatabase extends _$AppDatabase {
       );
     }
   }
-
   Future<void> simpanKasbonHarian(
       int karyawanId, DateTime tanggal, int nominal, String keterangan) async {
     final startOfDay = DateTime(tanggal.year, tanggal.month, tanggal.day);
@@ -325,7 +324,7 @@ class AppDatabase extends _$AppDatabase {
         ..where((t) => t.tanggal.isBiggerOrEqualValue(startOfDay))
         ..where((t) => t.tanggal.isSmallerOrEqualValue(endOfDay)))
       .getSingleOrNull();
-    if (existing!= null) {
+    if (existing != null) {
       await (update(kasbonHarian)..where((t) => t.id.equals(existing.id))).write(
         KasbonHarianCompanion(nominal: Value(nominal), keterangan: Value(keterangan)),
       );
@@ -350,7 +349,7 @@ class AppDatabase extends _$AppDatabase {
       .watch();
   }
 
-  // ===== TAMBAHAN FIX 5 ERROR TADI =====
+  // ===== TAMBAHAN FIX 5 ERROR TADI - JANGAN DIHAPUS =====
   Future<void> tambahKategori(String nama, int tarif) async {
     await into(kategoriKaryawan).insert(
       KategoriKaryawanCompanion.insert(
@@ -380,5 +379,24 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> hapusKaryawan(int id) async {
     await (delete(karyawan)..where((t) => t.id.equals(id))).go();
+  }
+
+  // ===== FIX PINDAH KATEGORI - NAIK/TURUN LEVEL =====
+  Future<void> pindahKategoriKaryawan(int karyawanId, int kategoriBaruId) async {
+    await (update(karyawan)..where((t) => t.id.equals(karyawanId))).write(
+      KaryawanCompanion(kategoriId: Value(kategoriBaruId)),
+    );
+  }
+
+  // Bersihkan ID:0 (data hantu)
+  Future<int> bersihkanIdNol() async {
+    int total = 0;
+    total += await (delete(absensi)..where((t) => t.karyawanId.equals(0))).go();
+    total += await customStatement('DELETE FROM absensi WHERE karyawan_id NOT IN (SELECT id FROM karyawan)');
+    total += await (delete(gajiMingguan)..where((t) => t.karyawanId.equals(0))).go();
+    total += await customStatement('DELETE FROM gaji_mingguan WHERE karyawan_id NOT IN (SELECT id FROM karyawan)');
+    total += await (delete(bintangHarian)..where((t) => t.karyawanId.equals(0))).go();
+    total += await (delete(kasbonHarian)..where((t) => t.karyawanId.equals(0))).go();
+    return total;
   }
 }
