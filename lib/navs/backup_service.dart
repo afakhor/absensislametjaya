@@ -17,6 +17,38 @@ class BackupService {
     return out;
   }
 
+  static DateTime _parseTgl(dynamic v) {
+    if (v == null) return DateTime.now();
+    if (v is DateTime) return v;
+    if (v is int) {
+      if (v > 10000000000) {
+        return DateTime.fromMillisecondsSinceEpoch(v, isUtc: true).toLocal();
+      } else {
+        return DateTime.fromMillisecondsSinceEpoch(v * 1000, isUtc: true).toLocal();
+      }
+    }
+    try {
+      final asInt = int.tryParse(v.toString());
+      if (asInt != null && asInt > 1000000000) {
+        if (asInt > 10000000000) {
+          return DateTime.fromMillisecondsSinceEpoch(asInt, isUtc: true).toLocal();
+        } else {
+          return DateTime.fromMillisecondsSinceEpoch(asInt * 1000, isUtc: true).toLocal();
+        }
+      }
+      return DateTime.parse(v.toString()).toLocal();
+    } catch (_) {
+      return DateTime.now();
+    }
+  }
+
+  static dynamic _get(Map m, List<String> keys) {
+    for (var k in keys) {
+      if (m.containsKey(k) && m[k] != null) return m[k];
+    }
+    return null;
+  }
+
   static Future<String?> exportBackup() async {
     try {
       final kategori = await db.select(db.kategoriKaryawan).get();
@@ -50,7 +82,6 @@ class BackupService {
       final fileName = 'TB_SLAMET_JAYA_${DateTime.now().millisecondsSinceEpoch}.bskro';
       final fileDoc = File('${docDir.path}/$fileName');
       await fileDoc.writeAsString(jsonString, flush: true);
-
       try {
         final down = Directory('/storage/emulated/0/Download');
         if (await down.exists()) {
@@ -76,39 +107,21 @@ class BackupService {
       final bytes = await File(path).readAsBytes();
       final head = utf8.decode(bytes.take(20).toList(), allowMalformed: true);
 
-      // FIX LANGKAH 3 SUKSES TAPI 4 NOL
       if (head.startsWith('SQLite format 3')) {
         try {
           await db.close();
           final docs = await getApplicationDocumentsDirectory();
           final support = await getApplicationSupportDirectory();
-
-          final possiblePaths = [
-            '${docs.path}/tb_slamet_jaya_v8_clean',
-            '${docs.path}/tb_slamet_jaya_v8_clean.sqlite',
-            '${support.path}/tb_slamet_jaya_v8_clean',
-            '${support.path}/tb_slamet_jaya_v8_clean.sqlite',
-          ];
-
-          // Hapus wal/shm biar gak baca data kosong lama
-          for (var p in possiblePaths) {
+          for (var p in ['${docs.path}/tb_slamet_jaya_v8_clean', '${support.path}/tb_slamet_jaya_v8_clean']) {
             try {
-              final wal = File('$p-wal');
-              final shm = File('$p-shm');
-              final dbf = File(p);
-              if (await wal.exists()) await wal.delete();
-              if (await shm.exists()) await shm.delete();
-              if (await dbf.exists()) await dbf.delete();
+              final wal = File('$p-wal'); if (await wal.exists()) await wal.delete();
+              final shm = File('$p-shm'); if (await shm.exists()) await shm.delete();
+              final dbf = File(p); if (await dbf.exists()) await dbf.delete();
             } catch (_) {}
           }
-
-          // Copy ke semua lokasi biar pasti kebaca
           await File(path).copy('${docs.path}/tb_slamet_jaya_v8_clean');
-          try {
-            await File(path).copy('${support.path}/tb_slamet_jaya_v8_clean');
-          } catch (_) {}
-
-          return 'SUKSES RESTORE DB MENTAH - Tutup total app dari recent apps, lalu buka lagi';
+          try { await File(path).copy('${support.path}/tb_slamet_jaya_v8_clean'); } catch (_) {}
+          return 'SUKSES RESTORE DB MENTAH - Tutup total app lalu buka lagi';
         } catch (e) {
           return 'GAGAL COPY DB: $e';
         }
@@ -117,9 +130,10 @@ class BackupService {
       final jsonStr = utf8.decode(bytes, allowMalformed: true);
       final Map<String, dynamic> json = jsonDecode(jsonStr);
 
-      DateTime parseTgl(dynamic v) {
-        if (v == null) return DateTime.now();
-        try { return DateTime.parse(v.toString()); } catch (_) { return DateTime.now(); }
+      final validKaryawanIds = <int>{};
+      for (var m in (json['karyawan'] ?? [])) {
+        final id = _get(m, ['id']) ?? 0;
+        if (id != 0) validKaryawanIds.add(id is int ? id : int.tryParse('$id') ?? 0);
       }
 
       await db.transaction(() async {
@@ -134,35 +148,58 @@ class BackupService {
         await db.delete(db.karyawan).go();
         await db.delete(db.kategoriKaryawan).go();
 
-        for (var m in (json['kategoriKaryawan']?? [])) {
-          final tarif = m['tarifPerHari'] is int? m['tarifPerHari'] : int.tryParse('${m['tarifPerHari']}')?? 0;
-          await db.into(db.kategoriKaryawan).insert(KategoriKaryawanCompanion.insert(id: Value(m['id']?? 0), namaKategori: m['namaKategori']?? '', tarifPerHari: tarif), mode: InsertMode.insertOrReplace);
+        for (var m in (json['kategoriKaryawan'] ?? [])) {
+          final id = _get(m, ['id']) ?? 0; if (id == 0) continue;
+          final nama = _get(m, ['namaKategori', 'nama_kategori']) ?? '';
+          final tarif = _get(m, ['tarifPerHari', 'tarif_per_hari']) ?? 0;
+          final t = tarif is int ? tarif : int.tryParse('$tarif') ?? 0;
+          await db.into(db.kategoriKaryawan).insert(KategoriKaryawanCompanion.insert(id: Value(id), namaKategori: nama, tarifPerHari: t), mode: InsertMode.insertOrReplace);
         }
-        for (var m in (json['karyawan']?? [])) {
-          await db.into(db.karyawan).insert(KaryawanCompanion.insert(id: Value(m['id']?? 0), nama: m['nama']?? '', kategoriId: m['kategoriId']?? 1, fotoPath: Value(m['fotoPath'])), mode: InsertMode.insertOrReplace);
+        for (var m in (json['karyawan'] ?? [])) {
+          final id = _get(m, ['id']) ?? 0; if (id == 0) continue;
+          final nama = _get(m, ['nama']) ?? '';
+          final katId = _get(m, ['kategoriId', 'kategori_id']) ?? 1;
+          final foto = _get(m, ['fotoPath', 'foto_path']);
+          await db.into(db.karyawan).insert(KaryawanCompanion.insert(id: Value(id), nama: nama, kategoriId: katId is int ? katId : int.tryParse('$katId') ?? 1, fotoPath: Value(foto)), mode: InsertMode.insertOrReplace);
         }
-        for (var m in (json['absensi']?? [])) {
-          await db.into(db.absensi).insert(AbsensiCompanion.insert(id: Value(m['id']?? 0), karyawanId: m['karyawanId']?? 0, jamMasuk: parseTgl(m['jamMasuk']), jamPulang: Value(m['jamPulang']!=null? parseTgl(m['jamPulang']) : null), totalJamKerja: Value((m['totalJamKerja']?? 8).toDouble()), metode: m['metode']?? 'manual', keterangan: Value(m['keterangan']?? ''), tipeKerja: Value(m['tipeKerja']?? 'FULL')), mode: InsertMode.insertOrReplace);
+        for (var m in (json['absensi'] ?? [])) {
+          final id = _get(m, ['id']) ?? 0; if (id == 0) continue;
+          final kId = _get(m, ['karyawanId', 'karyawan_id']) ?? 0;
+          final kIdInt = kId is int ? kId : int.tryParse('$kId') ?? 0;
+          if (kIdInt == 0 || !validKaryawanIds.contains(kIdInt)) continue;
+          await db.into(db.absensi).insert(AbsensiCompanion.insert(id: Value(id), karyawanId: kIdInt, jamMasuk: _parseTgl(_get(m, ['jamMasuk', 'jam_masuk'])), jamPulang: Value(_get(m, ['jamPulang', 'jam_pulang']) != null ? _parseTgl(_get(m, ['jamPulang', 'jam_pulang'])) : null), totalJamKerja: Value((_get(m, ['totalJamKerja', 'total_jam_kerja']) ?? 8).toDouble()), metode: _get(m, ['metode']) ?? 'FINGERPRINT', keterangan: Value(_get(m, ['keterangan']) ?? ''), tipeKerja: Value(_get(m, ['tipeKerja', 'tipe_kerja']) ?? 'FULL')), mode: InsertMode.insertOrReplace);
         }
-        for (var m in (json['gajiMingguan']?? [])) {
-          await db.into(db.gajiMingguan).insert(GajiMingguanCompanion.insert(id: Value(m['id']?? 0), karyawanId: m['karyawanId']?? 0, mingguMulai: parseTgl(m['mingguMulai']), mingguSelesai: parseTgl(m['mingguSelesai']), totalGaji: m['totalGaji']?? 0, totalHariEfektif: Value((m['totalHariEfektif']?? 0).toDouble()), totalHariMasuk: Value(m['totalHariMasuk']?? 0), totalJam: Value((m['totalJam']?? 0).toDouble()), totalGajiPokok: Value(m['totalGajiPokok']?? 0), bonusMingguan: Value(m['bonusMingguan']?? 0), totalBonus: Value(m['totalBonus']?? 0), statusBayar: Value(m['statusBayar']?? 'BELUM'), tanggalBayar: Value(m['tanggalBayar']!=null? parseTgl(m['tanggalBayar']) : null)), mode: InsertMode.insertOrReplace);
+        for (var m in (json['gajiMingguan'] ?? [])) {
+          final id = _get(m, ['id']) ?? 0; if (id == 0) continue;
+          final kId = _get(m, ['karyawanId', 'karyawan_id']) ?? 0;
+          final kIdInt = kId is int ? kId : int.tryParse('$kId') ?? 0;
+          if (kIdInt == 0 || !validKaryawanIds.contains(kIdInt)) continue;
+          await db.into(db.gajiMingguan).insert(GajiMingguanCompanion.insert(id: Value(id), karyawanId: kIdInt, mingguMulai: _parseTgl(_get(m, ['mingguMulai', 'minggu_mulai'])), mingguSelesai: _parseTgl(_get(m, ['mingguSelesai', 'minggu_selesai'])), totalGaji: _get(m, ['totalGaji', 'total_gaji']) ?? 0, totalHariEfektif: Value((_get(m, ['totalHariEfektif', 'total_hari_efektif']) ?? 0).toDouble()), totalHariMasuk: Value(_get(m, ['totalHariMasuk', 'total_hari_masuk']) ?? 0), totalJam: Value((_get(m, ['totalJam', 'total_jam']) ?? 0).toDouble()), totalGajiPokok: Value(_get(m, ['totalGajiPokok', 'total_gaji_pokok']) ?? 0), bonusMingguan: Value(_get(m, ['bonusMingguan', 'bonus_mingguan']) ?? 0), totalBonus: Value(_get(m, ['totalBonus', 'total_bonus']) ?? 0), statusBayar: Value(_get(m, ['statusBayar', 'status_bayar']) ?? 'BELUM'), tanggalBayar: Value(_get(m, ['tanggalBayar', 'tanggal_bayar']) != null ? _parseTgl(_get(m, ['tanggalBayar', 'tanggal_bayar'])) : null)), mode: InsertMode.insertOrReplace);
         }
-        for (var m in (json['transaksi']?? [])) {
-          await db.into(db.transaksi).insert(TransaksiCompanion.insert(id: Value(m['id']?? 0), jenis: m['jenis']?? '', keterangan: m['keterangan']?? '', nominal: m['nominal']?? 0, tanggal: parseTgl(m['tanggal'])), mode: InsertMode.insertOrReplace);
+        for (var m in (json['transaksi'] ?? [])) {
+          final id = _get(m, ['id']) ?? 0; if (id == 0) continue;
+          await db.into(db.transaksi).insert(TransaksiCompanion.insert(id: Value(id), jenis: _get(m, ['jenis']) ?? '', keterangan: _get(m, ['keterangan']) ?? '', nominal: _get(m, ['nominal']) ?? 0, tanggal: _parseTgl(_get(m, ['tanggal']))), mode: InsertMode.insertOrReplace);
         }
-        for (var m in (json['bintangHarian']?? [])) {
-          await db.into(db.bintangHarian).insert(BintangHarianCompanion.insert(id: Value(m['id']?? 0), karyawanId: m['karyawanId']?? 0, tanggal: parseTgl(m['tanggal']), bintang: Value(m['bintang']?? 0)), mode: InsertMode.insertOrReplace);
+        for (var m in (json['bintangHarian'] ?? [])) {
+          final id = _get(m, ['id']) ?? 0; if (id == 0) continue;
+          final kId = _get(m, ['karyawanId', 'karyawan_id']) ?? 0; final kIdInt = kId is int ? kId : int.tryParse('$kId') ?? 0;
+          if (kIdInt == 0 || !validKaryawanIds.contains(kIdInt)) continue;
+          await db.into(db.bintangHarian).insert(BintangHarianCompanion.insert(id: Value(id), karyawanId: kIdInt, tanggal: _parseTgl(_get(m, ['tanggal'])), bintang: Value(_get(m, ['bintang']) ?? 0)), mode: InsertMode.insertOrReplace);
         }
-        for (var m in (json['laporanHarian']?? [])) {
-          await db.into(db.laporanHarian).insert(LaporanHarianCompanion.insert(id: Value(m['id']?? 0), tanggal: parseTgl(m['tanggal']), totalPenjualan: Value(m['totalPenjualan']?? 0), cash: Value(m['cash']?? 0), piutangBaru: Value(m['piutangBaru']?? 0), namaPelangganBon: Value(m['namaPelangganBon']?? ''), bebanOperasional: Value(m['bebanOperasional']?? 0), kasbonKaryawan: Value(m['kasbonKaryawan']?? 0), tambahanLain: Value(m['tambahanLain']?? 0), keteranganTambahan: Value(m['keteranganTambahan']?? ''), saldoPiutangKemarin: Value(m['saldoPiutangKemarin']?? 0), totalGajiHariIni: Value(m['totalGajiHariIni']?? 0), labaKotor: Value(m['labaKotor']?? 0), labaBersih: Value(m['labaBersih']?? 0), kasHariIni: Value(m['kasHariIni']?? 0), totalPiutangAkhir: Value(m['totalPiutangAkhir']?? 0)), mode: InsertMode.insertOrReplace);
+        for (var m in (json['laporanHarian'] ?? [])) {
+          final id = _get(m, ['id']) ?? 0; if (id == 0) continue;
+          await db.into(db.laporanHarian).insert(LaporanHarianCompanion.insert(id: Value(id), tanggal: _parseTgl(_get(m, ['tanggal'])), totalPenjualan: Value(_get(m, ['totalPenjualan', 'total_penjualan']) ?? 0), cash: Value(_get(m, ['cash']) ?? 0), piutangBaru: Value(_get(m, ['piutangBaru', 'piutang_baru']) ?? 0), namaPelangganBon: Value(_get(m, ['namaPelangganBon', 'nama_pelanggan_bon']) ?? ''), bebanOperasional: Value(_get(m, ['bebanOperasional', 'beban_operasional']) ?? 0), kasbonKaryawan: Value(_get(m, ['kasbonKaryawan', 'kasbon_karyawan']) ?? 0), tambahanLain: Value(_get(m, ['tambahanLain', 'tambahan_lain']) ?? 0), keteranganTambahan: Value(_get(m, ['keteranganTambahan', 'keterangan_tambahan']) ?? ''), saldoPiutangKemarin: Value(_get(m, ['saldoPiutangKemarin', 'saldo_piutang_kemarin']) ?? 0), totalGajiHariIni: Value(_get(m, ['totalGajiHariIni', 'total_gaji_hari_ini']) ?? 0), labaKotor: Value(_get(m, ['labaKotor', 'laba_kotor']) ?? 0), labaBersih: Value(_get(m, ['labaBersih', 'laba_bersih']) ?? 0), kasHariIni: Value(_get(m, ['kasHariIni', 'kas_hari_ini']) ?? 0), totalPiutangAkhir: Value(_get(m, ['totalPiutangAkhir', 'total_piutang_akhir']) ?? 0)), mode: InsertMode.insertOrReplace);
         }
-        for (var m in (json['kasbonHarian']?? [])) {
-          await db.into(db.kasbonHarian).insert(KasbonHarianCompanion.insert(id: Value(m['id']?? 0), karyawanId: m['karyawanId']?? 0, tanggal: parseTgl(m['tanggal']), nominal: Value(m['nominal']?? 0), keterangan: Value(m['keterangan']?? '')), mode: InsertMode.insertOrReplace);
+        for (var m in (json['kasbonHarian'] ?? [])) {
+          final id = _get(m, ['id']) ?? 0; if (id == 0) continue;
+          final kId = _get(m, ['karyawanId', 'karyawan_id']) ?? 0; final kIdInt = kId is int ? kId : int.tryParse('$kId') ?? 0;
+          if (kIdInt == 0 || !validKaryawanIds.contains(kIdInt)) continue;
+          await db.into(db.kasbonHarian).insert(KasbonHarianCompanion.insert(id: Value(id), karyawanId: kIdInt, tanggal: _parseTgl(_get(m, ['tanggal'])), nominal: Value(_get(m, ['nominal']) ?? 0), keterangan: Value(_get(m, ['keterangan']) ?? '')), mode: InsertMode.insertOrReplace);
         }
       });
-      return 'SUKSES';
-    } catch (e) {
-      print('RESTORE FAIL $e');
+      return 'SUKSES - ${validKaryawanIds.length} karyawan, tanpa ID:0, periode fix WIB';
+    } catch (e, s) {
+      print('RESTORE FAIL $e $s');
       return 'GAGAL: $e';
     }
   }
