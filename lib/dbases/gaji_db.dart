@@ -2,6 +2,10 @@ import 'package:drift/drift.dart';
 import 'localdatabase.dart';
 
 extension GajiDao on AppDatabase {
+  DateTime _monday(DateTime d) {
+    return DateTime(d.year, d.month, d.day).subtract(Duration(days: d.weekday - 1));
+  }
+
   /// Input atau Update Kasbon Harian Karyawan
   Future<void> simpanKasbonHarian(
       int karyawanId, DateTime tgl, int nominal, String ket) async {
@@ -57,9 +61,30 @@ extension GajiDao on AppDatabase {
         .watch();
   }
 
-  /// PROSES HITUNG GAJI MINGGUAN (PERIODE SENIN S.D. MINGGU)
+  /// FIX PERIODE SALAH 4-11 -> BERSIHKAN DATA LAMA YANG BUKAN SENIN
+  Future<int> bersihkanPeriodeSalah() async {
+    final all = await select(gajiMingguan).get();
+    int deleted = 0;
+    for (var g in all) {
+      // Jika mingguMulai bukan Senin (weekday != 1) atau durasi bukan 6 hari
+      if (g.mingguMulai.weekday != 1) {
+        deleted += await (delete(gajiMingguan)..where((t) => t.id.equals(g.id))).go();
+      }
+    }
+    return deleted;
+  }
+
+  /// PROSES HITUNG GAJI MINGGUAN (PERIODE SENIN S.D. MINGGU) - FIX 5-11 & 12-18
   Future<void> prosesHitungGajiMingguan() async {
     await transaction(() async {
+      // Bersihkan dulu periode yang salah (misal 04/10-11/10 yang 8 hari)
+      final allGaji = await select(gajiMingguan).get();
+      for (var g in allGaji) {
+        if (g.mingguMulai.weekday != DateTime.monday) {
+          await (delete(gajiMingguan)..where((t) => t.id.equals(g.id))).go();
+        }
+      }
+
       final allKar = await select(karyawan).get();
       final allAbsen = await select(absensi).get();
       final allKat = await select(kategoriKaryawan).get();
@@ -78,26 +103,22 @@ extension GajiDao on AppDatabase {
           ..sort((a, b) => a.jamMasuk.compareTo(b.jamMasuk));
         if (absenKar.isEmpty) continue;
 
-        // Grouping berdasarkan Senin (Start of Week)
+        // Grouping berdasarkan Senin (Start of Week) - FIX
         Map<DateTime, List<AbsensiData>> perMinggu = {};
         for (var a in absenKar) {
           final tgl = a.jamMasuk;
-          // tgl.weekday: 1=Senin, ..., 7=Minggu
-          // Menarik tanggal selalu ke hari Senin jam 00:00:00
-          final senin = DateTime(tgl.year, tgl.month, tgl.day)
-              .subtract(Duration(days: tgl.weekday - 1));
+          final senin = _monday(tgl); // Senin jam 00:00:00 - selalu 5,12,19,26
           final key = DateTime(senin.year, senin.month, senin.day, 0, 0, 0);
           perMinggu.putIfAbsent(key, () => []).add(a);
         }
 
         for (var entry in perMinggu.entries) {
-          final mingguMulai = entry.key; // Senin 00:00:00
+          final mingguMulai = entry.key; // Senin 00:00:00 - pasti Senin 5,12,19
           final mingguSelesai = DateTime(
-              mingguMulai.year, mingguMulai.month, mingguMulai.day + 6, 23, 59, 59, 999); // Minggu 23:59:59
+              mingguMulai.year, mingguMulai.month, mingguMulai.day + 6, 23, 59, 59, 999); // Minggu 23:59:59 - pasti 11,18,25
 
           final list = entry.value;
 
-          // Hitung Hari Efektif berdasarkan tipe kerja
           double efektif = 0;
           for (var a in list) {
             final tipe = a.tipeKerja.toUpperCase().trim();
@@ -108,7 +129,6 @@ extension GajiDao on AppDatabase {
             }
           }
 
-          // Perhitungan Bintang & Bonus
           final bintangMinggu = await (select(bintangHarian)
                 ..where((t) => t.karyawanId.equals(kar.id))
                 ..where((t) => t.tanggal.isBiggerOrEqualValue(mingguMulai))
@@ -132,9 +152,7 @@ extension GajiDao on AppDatabase {
             bonusOtomatis = (tarif * efektif * 0.05).round();
           }
 
-          // Hitung Kasbon Periode Ini (Senin - Minggu)
           final totalKasbon = await getKasbonPeriode(kar.id, mingguMulai, mingguSelesai);
-
           final gajiPokok = (tarif * efektif).round();
 
           final existing = await (select(gajiMingguan)
@@ -154,14 +172,13 @@ extension GajiDao on AppDatabase {
               totalGajiPokok: Value(gajiPokok),
               bonusMingguan: Value(bonusOtomatis),
               totalBonus: Value(bonusOtomatis),
-              totalGaji: netGaji < 0 ? 0 : netGaji, // Mencegah nilai minus jika kasbon > gaji
+              totalGaji: netGaji < 0 ? 0 : netGaji,
             ));
           } else {
-            // Gunakan bonus manual jika sudah ada penyesuaian manual, jika belum gunakan bonus otomatis
             final bonusDipakai = existing.bonusMingguan > 0
                 ? existing.bonusMingguan
                 : bonusOtomatis;
-                
+
             final netGajiBaru = (gajiPokok + bonusDipakai) - totalKasbon;
 
             await (update(gajiMingguan)..where((t) => t.id.equals(existing.id)))
@@ -193,7 +210,6 @@ extension GajiDao on AppDatabase {
         .getSingleOrNull();
     if (g == null) return;
 
-    // Ambil total kasbon periode terkait
     final totalKasbon = await getKasbonPeriode(g.karyawanId, g.mingguMulai, g.mingguSelesai);
     final netGaji = (g.totalGajiPokok + bonus) - totalKasbon;
 
