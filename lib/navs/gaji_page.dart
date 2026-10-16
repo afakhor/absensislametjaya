@@ -98,21 +98,87 @@ class _GajiPageState extends State<GajiPage> {
     return "${rating.toStringAsFixed(1)} ★";
   }
 
+  // ===== FIX SLIP GAJI RAPI + ALAMAT + TTD BIRU + PERIODE HIJAU TETAP =====
   Future<pw.Document> _pdf({required String nama, required String periode, required int pokok, required int bonus, required int kasbon, required int total, required double rating}) async {
     final pdf = pw.Document();
-    pdf.addPage(pw.Page(pageFormat: PdfPageFormat.roll80, margin: const pw.EdgeInsets.all(12), build: (c) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-      pw.Center(child: pw.Text("TB. SLAMET JAYA", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold))),
-      pw.Divider(),
-      pw.Text("Nama: $nama | Periode: $periode | Rating Live: ${rating.toStringAsFixed(1)}", style: const pw.TextStyle(fontSize: 9)),
-      pw.Divider(),
-      pw.Text("Pokok Rp ${fmt.format(pokok)} + Bonus Manual Rp ${fmt.format(bonus)} - Kasbon Rp ${fmt.format(kasbon)} = Rp ${fmt.format(total)}", style: const pw.TextStyle(fontSize: 9)),
-    ])));
+    pdf.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(24),
+      build: (c) {
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // HEADER - KUNING
+            pw.Center(child: pw.Text("TB. SLAMET JAYA", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold))),
+            pw.SizedBox(height: 4),
+            pw.Center(child: pw.Text("Jalan simpang 3 pasang jranjang, Langgar, Kertosuko,", style: const pw.TextStyle(fontSize: 8))),
+            pw.Center(child: pw.Text("Kec. Krucil, Kabupaten Probolinggo, Jawa Timur 67288", style: const pw.TextStyle(fontSize: 8))),
+            pw.Center(child: pw.Text("0851-5690-0287", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+            pw.Divider(thickness: 1.5),
+            pw.SizedBox(height: 6),
+            // INFO KARYAWAN - HIJAU PERIODE TETAP
+            pw.Text("Nama: $nama", style: const pw.TextStyle(fontSize: 10)),
+            pw.Text("Periode: $periode", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+            pw.Text("Rating Live: ${rating.toStringAsFixed(1)}", style: const pw.TextStyle(fontSize: 9)),
+            pw.Divider(),
+            pw.SizedBox(height: 6),
+            // RINCIAN SLIP GAJI RAPI
+            pw.Text("RINCIAN GAJI", style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 6),
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              pw.Text("Gaji Pokok", style: const pw.TextStyle(fontSize: 10)),
+              pw.Text("Rp ${fmt.format(pokok)}", style: const pw.TextStyle(fontSize: 10)),
+            ]),
+            pw.SizedBox(height: 3),
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              pw.Text("Bonus Manual", style: const pw.TextStyle(fontSize: 10)),
+              pw.Text("Rp ${fmt.format(bonus)}", style: const pw.TextStyle(fontSize: 10)),
+            ]),
+            pw.SizedBox(height: 3),
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              pw.Text("Potongan Kasbon", style: const pw.TextStyle(fontSize: 10)),
+              pw.Text("- Rp ${fmt.format(kasbon)}", style: const pw.TextStyle(fontSize: 10)),
+            ]),
+            pw.Divider(),
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              pw.Text("TOTAL DITERIMA", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+              pw.Text("Rp ${fmt.format(total)}", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+            ]),
+            pw.Spacer(),
+            pw.SizedBox(height: 20),
+            // TANDA TANGAN - BIRU
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(children: [
+                  pw.Text("KARYAWAN", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 40),
+                  pw.Text(nama.toUpperCase(), style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Container(width: 100, child: pw.Divider(thickness: 1)),
+                  pw.Text("NAMA KARYAWAN", style: const pw.TextStyle(fontSize: 8)),
+                ]),
+                pw.Column(children: [
+                  pw.Text("CEO SLAMET JAYA", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 40),
+                  pw.Text("BPK. SLAMET", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Container(width: 100, child: pw.Divider(thickness: 1)),
+                  pw.Text("PIMPINAN", style: const pw.TextStyle(fontSize: 8)),
+                ]),
+              ],
+            ),
+            pw.SizedBox(height: 20),
+            pw.Center(child: pw.Text("Terima kasih atas kerja kerasnya", style: const pw.TextStyle(fontSize: 8))),
+          ],
+        );
+      },
+    ));
     return pdf;
   }
+
   Future<void> _shareWA({required String nama, required String periode, required int pokok, required int bonus, required int kasbon, required int total, required double rating}) async {
     final pdf = await _pdf(nama: nama, periode: periode, pokok: pokok, bonus: bonus, kasbon: kasbon, total: total, rating: rating);
     final bytes = await pdf.save(); final dir = await getTemporaryDirectory(); final path = "${dir.path}/Slip_$nama.pdf"; await File(path).writeAsBytes(bytes);
-    await Share.shareXFiles([XFile(path)], text: "*SLIP GAJI* $nama $periode Rating ${rating.toStringAsFixed(1)} Terima Rp ${fmt.format(total)}");
+    await Share.shareXFiles([XFile(path)], text: "*SLIP GAJI*\n$nama\nPeriode: $periode\nRating ${rating.toStringAsFixed(1)}\nTerima Rp ${fmt.format(total)}\n\nTB. SLAMET JAYA\nJalan simpang 3 pasang jranjang, Langgar, Kertosuko, Kec. Krucil");
   }
   Future<void> _printSlip({required String nama, required String periode, required int pokok, required int bonus, required int kasbon, required int total, required double rating}) async {
     final pdf = await _pdf(nama: nama, periode: periode, pokok: pokok, bonus: bonus, kasbon: kasbon, total: total, rating: rating);
@@ -174,7 +240,6 @@ class _GajiPageState extends State<GajiPage> {
       ),
     ));
   }
-
   void _showFilterLengkap(List<KaryawanData> listKar) {
     showModalBottomSheet(
       context: context,
@@ -239,7 +304,6 @@ class _GajiPageState extends State<GajiPage> {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           var all = snap.data?? [];
           var filtered = all.where((g) {
-            // FIX PERIODE: cek overlap, bukan exact
             if (_selectedDateRange != null) {
               final s = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
               final e = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day, 23, 59, 59);
@@ -299,14 +363,19 @@ class _GajiPageState extends State<GajiPage> {
                     final kotor = g.totalGajiPokok + g.bonusMingguan;
                     final bersihFinal = _bersihAdil(pokok: g.totalGajiPokok, bonus: g.bonusMingguan, kasbon: kas);
                     final sisa = kas > kotor? kas - kotor : 0;
+                    final periodeStr = "${DateFormat('dd/MM').format(g.mingguMulai)}-${DateFormat('dd/MM/yy').format(g.mingguSelesai)}";
 
                     return Card(margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Container(decoration: BoxDecoration(border: Border(left: BorderSide(color: col, width: 6)), borderRadius: BorderRadius.circular(12)), child: ExpansionTile(
-                      title: Text("$nama • ${_label(g.statusBayar)}", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      title: Row(children: [
+                        Expanded(child: Text("$nama • ${_label(g.statusBayar)}", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
+                        Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: caramel.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: Text(periodeStr, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: roast))),
+                      ]),
                       subtitle: Text("Kotor Rp ${fmt.format(kotor)} • Bersih Rp ${fmt.format(bersihFinal)}", style: const TextStyle(fontSize: 11)),
                       trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [Text("Rp ${fmt.format(bersihFinal)}", style: TextStyle(fontWeight: FontWeight.bold, color: bersihFinal == 0? Colors.red : roast)), if (sisa > 0) Text("Sisa ${fmt.format(sisa)}", style: const TextStyle(fontSize: 9, color: Colors.red))]),
                       children: [
                         Padding(padding: const EdgeInsets.all(12), child: Column(children: [
                           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Gaji Pokok (Live):"), Text("Rp ${fmt.format(g.totalGajiPokok)}")]),
+                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Periode:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)), Text(periodeStr, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: coffee))]),
                           const SizedBox(height: 6),
                           FutureBuilder<double>(future: _getRatingLive(g.karyawanId, g.mingguMulai, g.mingguSelesai), builder: (c, rateSnap) {
                             final rating = rateSnap.data?? 0.0;
@@ -333,9 +402,9 @@ class _GajiPageState extends State<GajiPage> {
                               Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: bersihFinal == 0? Colors.red.shade900 : roast, borderRadius: BorderRadius.circular(8)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Total Diterima (min 0):", style: TextStyle(color: Color(0xFFA87336), fontWeight: FontWeight.bold)), Text("Rp ${fmt.format(bersihFinal)}", style: const TextStyle(color: Color(0xFFA87336), fontWeight: FontWeight.bold))])),
                               const SizedBox(height: 8),
                               Row(children: [
-                                Expanded(child: ElevatedButton.icon(icon: const Icon(Icons.description, size: 16), label: const Text("slip"), style: ElevatedButton.styleFrom(backgroundColor: roast, foregroundColor: Colors.white), onPressed: () => _printSlip(nama: nama, periode: "${DateFormat('dd/MM').format(g.mingguMulai)}-${DateFormat('dd/MM/yy').format(g.mingguSelesai)}", pokok: g.totalGajiPokok, bonus: g.bonusMingguan, kasbon: kas, total: bersihFinal, rating: rating))),
+                                Expanded(child: ElevatedButton.icon(icon: const Icon(Icons.description, size: 16), label: const Text("slip"), style: ElevatedButton.styleFrom(backgroundColor: roast, foregroundColor: Colors.white), onPressed: () => _printSlip(nama: nama, periode: periodeStr, pokok: g.totalGajiPokok, bonus: g.bonusMingguan, kasbon: kas, total: bersihFinal, rating: rating))),
                                 const SizedBox(width: 8),
-                                Expanded(child: ElevatedButton.icon(icon: const Icon(Icons.chat, size: 16), label: const Text("WA"), style: ElevatedButton.styleFrom(backgroundColor: col, foregroundColor: _text(col)), onPressed: () => _shareWA(nama: nama, periode: "${DateFormat('dd/MM').format(g.mingguMulai)}-${DateFormat('dd/MM/yy').format(g.mingguSelesai)}", pokok: g.totalGajiPokok, bonus: g.bonusMingguan, kasbon: kas, total: bersihFinal, rating: rating))),
+                                Expanded(child: ElevatedButton.icon(icon: const Icon(Icons.chat, size: 16), label: const Text("WA"), style: ElevatedButton.styleFrom(backgroundColor: col, foregroundColor: _text(col)), onPressed: () => _shareWA(nama: nama, periode: periodeStr, pokok: g.totalGajiPokok, bonus: g.bonusMingguan, kasbon: kas, total: bersihFinal, rating: rating))),
                                 const SizedBox(width: 8),
                                 DropdownButton<String>(value: g.statusBayar, items: const [DropdownMenuItem(value: 'BELUM_GAJIAN', child: Text("Belum")), DropdownMenuItem(value: '1 MINGGU', child: Text("1 Minggu")), DropdownMenuItem(value: '2 MINGGU', child: Text("2 Minggu")), DropdownMenuItem(value: 'LUNAS', child: Text("Lunas"))], onChanged: (v) async { if (v!= null) await db.tandaiBayar(g.id, v); }),
                               ]),
