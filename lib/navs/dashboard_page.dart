@@ -1,12 +1,33 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../dbases/localdatabase.dart';
 
+/// Formatter ribuan: 50000000 -> 50.000.000
+class ThousandSeparatorInputFormatter extends TextInputFormatter {
+  final NumberFormat _fmt = NumberFormat("#,###", "id_ID");
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    if (newValue.text.isEmpty) return newValue;
+    String digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return const TextEditingValue(text: "");
+    // Hapus leading zero biar 0 auto hilang
+    digits = digits.replaceFirst(RegExp(r'^0+'), '');
+    if (digits.isEmpty) digits = "0";
+    if (digits == "0") return const TextEditingValue(text: "0", selection: TextSelection.collapsed(offset: 1));
+    int val = int.tryParse(digits) ?? 0;
+    String formatted = _fmt.format(val);
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
-
   @override
   State<DashboardPage> createState() => _DashboardPageState();
 }
@@ -14,6 +35,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final db = AppDatabase();
   final fmt = NumberFormat("#,###", "id_ID");
+  final fmtRp = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
   DateTime nowLive = DateTime.now();
   Timer? timer;
 
@@ -31,6 +53,7 @@ class _DashboardPageState extends State<DashboardPage> {
   DateTime logSelesai = DateTime.now();
   Map<DateTime, List<AbsensiData>> absenPerTanggal = {};
   List<KaryawanData> allKaryawan = [];
+  List<KategoriKaryawanData> allKategori = [];
 
   String _loadedDateKey = "";
 
@@ -41,9 +64,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted) {
         final currentNow = DateTime.now();
         final currentKey = DateFormat('yyyy-MM-dd').format(currentNow);
-
-        // FIX: Jika ganti hari (lewat 00:00), reset form & kunci loader
-        if (_loadedDateKey.isNotEmpty && _loadedDateKey!= currentKey) {
+        if (_loadedDateKey.isNotEmpty && _loadedDateKey != currentKey) {
           _loadedDateKey = "";
           _resetControllers();
         }
@@ -80,14 +101,15 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _loadBulan() async {
     final listKar = await db.select(db.karyawan).get();
+    final listKat = await db.select(db.kategoriKaryawan).get();
     final first = DateTime(bulan.year, bulan.month, 1);
     final last = DateTime(bulan.year, bulan.month + 1, 0, 23, 59, 59);
     final allAbsen = await db.select(db.absensi).get();
     final filtered = allAbsen
-       .where((a) =>
+        .where((a) =>
             a.jamMasuk.isAfter(first.subtract(const Duration(seconds: 1))) &&
             a.jamMasuk.isBefore(last.add(const Duration(seconds: 1))))
-       .toList();
+        .toList();
 
     Map<DateTime, List<AbsensiData>> map = {};
     for (var a in filtered) {
@@ -98,12 +120,13 @@ class _DashboardPageState extends State<DashboardPage> {
     if (mounted) {
       setState(() {
         allKaryawan = listKar;
+        allKategori = listKat;
         absenPerTanggal = map;
       });
     }
   }
 
-  int _parse(String s) => int.tryParse(s.replaceAll(RegExp(r'[^0-9]'), ''))?? 0;
+  int _parse(String s) => int.tryParse(s.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
 
   Widget _bintangWidget(int karyawanId, int bintangSaatIni, DateTime tglRef) {
     return Row(
@@ -117,7 +140,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2.0),
             child: Icon(
-              idx <= bintangSaatIni? Icons.star : Icons.star_border,
+              idx <= bintangSaatIni ? Icons.star : Icons.star_border,
               size: 24,
               color: Colors.amber.shade700,
             ),
@@ -136,17 +159,18 @@ class _DashboardPageState extends State<DashboardPage> {
         content: TextField(
           controller: txtC,
           keyboardType: TextInputType.number,
+          inputFormatters: [ThousandSeparatorInputFormatter()],
           decoration: const InputDecoration(
             labelText: "Nominal Kasbon (Rp)",
             border: OutlineInputBorder(),
+            prefixText: "Rp ",
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Batal")),
           ElevatedButton(
             onPressed: () async {
-              final val = int.tryParse(txtC.text)?? 0;
-              // FIX: pakai tglRef (nowLive) biar per ID per TANGGAL
+              final val = _parse(txtC.text);
               await db.simpanKasbonHarian(karyawanId, tglRef, val, "Kasbon via Live Dashboard");
               if (ctx.mounted) {
                 Navigator.pop(ctx);
@@ -164,7 +188,6 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _liveTab() {
-    // FIX UTAMA: pakai nowLive konsisten untuk semua query hari ini
     final today = nowLive;
     final startOfToday = DateTime(today.year, today.month, today.day);
     final endOfToday = DateTime(today.year, today.month, today.day, 23, 59, 59, 999);
@@ -172,40 +195,35 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return StreamBuilder<List<AbsensiData>>(
       stream: (db.select(db.absensi)
-           ..where((t) => t.jamMasuk.isBiggerOrEqualValue(startOfToday))
-           ..where((t) => t.jamMasuk.isSmallerOrEqualValue(endOfToday)))
-         .watch(),
+            ..where((t) => t.jamMasuk.isBiggerOrEqualValue(startOfToday))
+            ..where((t) => t.jamMasuk.isSmallerOrEqualValue(endOfToday)))
+          .watch(),
       builder: (c, absSnap) {
-        final absHariIni = absSnap.data?? [];
+        final absHariIni = absSnap.data ?? [];
 
         return StreamBuilder<List<KaryawanData>>(
           stream: db.select(db.karyawan).watch(),
           builder: (c, karSnap) {
             if (!karSnap.hasData) return const Center(child: CircularProgressIndicator());
-            final allKar = karSnap.data?? [];
+            final allKar = karSnap.data ?? [];
 
             final idsMasuk = absHariIni.map((e) => e.karyawanId).toSet();
-            final bolong = allKar.where((k) =>!idsMasuk.contains(k.id)).toList();
+            final bolong = allKar.where((k) => !idsMasuk.contains(k.id)).toList();
 
             final full = absHariIni.where((a) {
               final t = a.tipeKerja.toUpperCase().trim();
               return t == 'FULL' || t == 'FULL_DAY';
             }).toList();
 
-            final setengah = absHariIni.where((a) {
-              final t = a.tipeKerja.toUpperCase().trim();
-              return t == 'HALF' || t == 'HALF_DAY' || t == 'SETENGAH' || t == '½ HARI';
-            }).toList();
-
             return StreamBuilder<List<BintangHarianData>>(
               stream: db.watchBintangHari(today),
               builder: (c, bintangSnap) {
-                final mapB = {for (var b in bintangSnap.data?? []) b.karyawanId: b.bintang};
+                final mapB = {for (var b in bintangSnap.data ?? []) b.karyawanId: b.bintang};
 
                 return StreamBuilder<List<KasbonHarianData>>(
                   stream: db.watchKasbonHariIni(today),
                   builder: (c, kasbonSnap) {
-                    final mapKasbon = {for (var k in kasbonSnap.data?? []) k.karyawanId: k.nominal};
+                    final mapKasbon = {for (var k in kasbonSnap.data ?? []) k.karyawanId: k.nominal};
 
                     return ListView(
                       padding: const EdgeInsets.all(12),
@@ -224,8 +242,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
-
-                                                Card(
+                        Card(
                           elevation: 2,
                           child: Padding(
                             padding: const EdgeInsets.all(12),
@@ -237,7 +254,6 @@ class _DashboardPageState extends State<DashboardPage> {
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 const Divider(),
-                                // FIX: Gabung jadi 1 list, tiap ID punya checklist FULL | ½ HARI + input KASBON
                                 ...absHariIni.map((a) {
                                   final kar = allKar.where((k) => k.id == a.karyawanId).firstOrNull;
                                   final namaKar = kar?.nama ?? "ID:${a.karyawanId}";
@@ -272,11 +288,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                             ),
                                         ],
                                       ),
-                                      // INI PENGGANTI TITIK 3 BIRU
                                       trailing: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          // CHECKLIST SALAH SATU - ½ HARI | FULLDAY
                                           ChoiceChip(
                                             label: const Text("Full", style: TextStyle(fontSize: 11)),
                                             selected: isFull,
@@ -301,7 +315,6 @@ class _DashboardPageState extends State<DashboardPage> {
                                             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                           ),
                                           const SizedBox(width: 4),
-                                          // KASBON = INPUTAN
                                           IconButton(
                                             icon: const Icon(Icons.money_off, size: 18, color: Colors.red),
                                             tooltip: "Input Kasbon",
@@ -331,35 +344,31 @@ class _DashboardPageState extends State<DashboardPage> {
                               children: [
                                 const Text("⭐ RATING KARYAWAN HARI INI", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown)),
                                 const Divider(),
-                               ...allKar.map((k) => ListTile(
+                                ...allKar.map((k) => ListTile(
                                       dense: true,
                                       contentPadding: EdgeInsets.zero,
                                       title: Text(k.nama, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                      trailing: _bintangWidget(k.id, mapB[k.id]?? 0, today),
+                                      trailing: _bintangWidget(k.id, mapB[k.id] ?? 0, today),
                                     )),
                               ],
                             ),
                           ),
                         ),
                         const SizedBox(height: 12),
-
                         StreamBuilder<LaporanHarianData?>(
                           stream: db.watchLaporanHari(today),
                           builder: (c, lapSnap) {
                             final lap = lapSnap.data;
-
-                            // FIX: Load sekali per tanggal, tapi tetap bisa diedit
-                            if (lap!= null && _loadedDateKey!= todayKeyStr) {
+                            if (lap != null && _loadedDateKey != todayKeyStr) {
                               _loadedDateKey = todayKeyStr;
-                              omsetC.text = lap.totalPenjualan.toString();
-                              cashC.text = lap.cash.toString();
-                              pendingC.text = lap.piutangBaru.toString();
-                              pemLainC.text = lap.tambahanLain.toString();
-                              bebanOpsC.text = lap.bebanOperasional.toString();
-                              kasbonC.text = lap.kasbonKaryawan.toString();
-                              bebanLainC.text = lap.saldoPiutangKemarin.toString();
-                            } else if (lap == null && _loadedDateKey!= todayKeyStr) {
-                              // Kalau belum ada laporan hari ini, kunci biar gak reload terus
+                              omsetC.text = lap.totalPenjualan == 0 ? "0" : fmt.format(lap.totalPenjualan);
+                              cashC.text = lap.cash == 0 ? "0" : fmt.format(lap.cash);
+                              pendingC.text = lap.piutangBaru == 0 ? "0" : fmt.format(lap.piutangBaru);
+                              pemLainC.text = lap.tambahanLain == 0 ? "0" : fmt.format(lap.tambahanLain);
+                              bebanOpsC.text = lap.bebanOperasional == 0 ? "0" : fmt.format(lap.bebanOperasional);
+                              kasbonC.text = lap.kasbonKaryawan == 0 ? "0" : fmt.format(lap.kasbonKaryawan);
+                              bebanLainC.text = lap.saldoPiutangKemarin == 0 ? "0" : fmt.format(lap.saldoPiutangKemarin);
+                            } else if (lap == null && _loadedDateKey != todayKeyStr) {
                               _loadedDateKey = todayKeyStr;
                             }
 
@@ -376,21 +385,21 @@ class _DashboardPageState extends State<DashboardPage> {
                                         style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
                                     const Divider(),
                                     const Text("1. Omset & Kas Masuk", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                    _buildField("Omset Hari Ini", omsetC),
-                                    _buildField("Cash Hari Ini", cashC),
-                                    _buildField("Cash / Pending", pendingC),
-                                    _buildField("Pemasukan Lain", pemLainC),
+                                    _buildRupiahField("Omset Hari Ini", omsetC),
+                                    _buildRupiahField("Cash Hari Ini", cashC),
+                                    _buildRupiahField("Cash / Pending", pendingC),
+                                    _buildRupiahField("Pemasukan Lain", pemLainC),
                                     const SizedBox(height: 10),
                                     const Text("2. Parameter Margin & Beban", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                    _buildField("Margin (%)", marginC),
-                                    _buildField("Beban Ops", bebanOpsC),
-                                    _buildField("Kasbon Karyawan", kasbonC),
-                                    _buildField("Beban Lain", bebanLainC),
+                                    _buildRupiahField("Margin (%)", marginC, isPercent: true),
+                                    _buildRupiahField("Beban Ops", bebanOpsC),
+                                    _buildRupiahField("Kasbon Karyawan", kasbonC),
+                                    _buildRupiahField("Beban Lain", bebanLainC),
                                     const SizedBox(height: 12),
                                     FutureBuilder<int>(
                                       future: db.hitungGajiHariIni(today),
                                       builder: (c, gajiSnap) {
-                                        final bebanGaji = gajiSnap.data?? 0;
+                                        final bebanGaji = gajiSnap.data ?? 0;
                                         final omset = _parse(omsetC.text);
                                         final cash = _parse(cashC.text);
                                         final pending = _parse(pendingC.text);
@@ -400,11 +409,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                         final kasbon = _parse(kasbonC.text);
                                         final bebanLain = _parse(bebanLainC.text);
 
-                                        final labaKotor = (omset * (marginPct > 0? marginPct : 0.10)).round();
+                                        final labaKotor = (omset * (marginPct > 0 ? marginPct : 0.10)).round();
                                         final labaBersih = labaKotor + pemLain - bebanGaji - bebanOps - bebanLain;
                                         final kasHariIni = cash + pemLain - bebanGaji - bebanOps - kasbon - bebanLain;
                                         final totalBebanHarian = bebanGaji + bebanOps + bebanLain;
-                                        final rasioBebanOmset = omset > 0? ((totalBebanHarian / omset) * 100).toStringAsFixed(1) : "0.0";
+                                        final rasioBebanOmset = omset > 0 ? ((totalBebanHarian / omset) * 100).toStringAsFixed(1) : "0.0";
 
                                         return Container(
                                           padding: const EdgeInsets.all(12),
@@ -419,7 +428,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                               const Divider(),
                                               _buildRow("Laba Kotor (${(marginPct * 100).toInt()}%)", "Rp ${fmt.format(labaKotor)}", Colors.purple.shade900),
                                               _buildRow("LABA BERSIH", "Rp ${fmt.format(labaBersih)}",
-                                                  labaBersih >= 0? Colors.green.shade700 : Colors.red.shade700, isBold: true),
+                                                  labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700, isBold: true),
                                               const Divider(),
                                               _buildRow("KAS HARI INI (Di Laci)", "Rp ${fmt.format(kasHariIni)}", Colors.blue.shade900, isBold: true),
                                               const Divider(),
@@ -427,7 +436,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                               _buildRow("Rasio Beban / Omset", "$rasioBebanOmset %", Colors.black87),
                                               _buildRow("Pending / Piutang Baru", "Rp ${fmt.format(pending)}", Colors.orange.shade800),
                                               const SizedBox(height: 12),
-                                                                                            SizedBox(
+                                              SizedBox(
                                                 width: double.infinity,
                                                 height: 44,
                                                 child: ElevatedButton(
@@ -436,11 +445,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                                     foregroundColor: Colors.white,
                                                   ),
                                                   onPressed: () async {
-                                                    // FIX: pakai nowLive biar tanggal selalu konsisten
                                                     final todayNormalized = DateTime(nowLive.year, nowLive.month, nowLive.day);
-
                                                     await db.simpanLaporanHarianFull(
-                                                      tgl: todayNormalized, // <- kunci: 1 tanggal = 1 baris
+                                                      tgl: todayNormalized,
                                                       omset: omset,
                                                       cash: cash,
                                                       piutangBaru: pending,
@@ -456,16 +463,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                                       kasHariIni: kasHariIni,
                                                       totalPiutangAkhir: pending + bebanLain,
                                                     );
-
                                                     await _loadBulan();
-
                                                     if (context.mounted) {
                                                       ScaffoldMessenger.of(context).hideCurrentSnackBar();
                                                       ScaffoldMessenger.of(context).showSnackBar(
                                                         SnackBar(
-                                                          content: Text(
-                                                            "Log Live ${DateFormat('dd MMM yyyy').format(todayNormalized)} berhasil diperbarui! (nimpa)",
-                                                          ),
+                                                          content: Text("Log Live ${DateFormat('dd MMM yyyy').format(todayNormalized)} berhasil diperbarui! (nimpa)"),
                                                           backgroundColor: Colors.green.shade800,
                                                           duration: const Duration(seconds: 2),
                                                         ),
@@ -498,20 +501,40 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, {bool isNum = true}) {
+  // KUNING: Field 0 auto hilang pas fokus + titik ribuan
+  Widget _buildRupiahField(String label, TextEditingController controller, {bool isPercent = false}) {
     return Padding(
       padding: const EdgeInsets.only(top: 6),
-      child: TextField(
-        controller: controller,
-        keyboardType: isNum? TextInputType.number : TextInputType.text,
-        style: const TextStyle(fontSize: 13),
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          border: const OutlineInputBorder(),
+      child: Focus(
+        onFocusChange: (hasFocus) {
+          if (hasFocus) {
+            if (controller.text == "0" || controller.text == "0.000" || controller.text == "0,000") {
+              controller.text = "";
+            }
+          } else {
+            if (controller.text.trim().isEmpty) {
+              controller.text = "0";
+            }
+          }
+        },
+        child: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: isPercent
+              ? [FilteringTextInputFormatter.digitsOnly]
+              : [ThousandSeparatorInputFormatter()],
+          style: const TextStyle(fontSize: 13),
+          decoration: InputDecoration(
+            labelText: label,
+            prefixText: isPercent ? null : "Rp ",
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            border: const OutlineInputBorder(),
+            filled: true,
+            fillColor: Colors.white,
+          ),
+          onChanged: (_) => setState(() {}),
         ),
-        onChanged: (_) => setState(() {}),
       ),
     );
   }
@@ -522,8 +545,8 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: isBold? FontWeight.bold : FontWeight.normal)),
-          Text(val, style: TextStyle(fontSize: 12, fontWeight: isBold? FontWeight.bold : FontWeight.w600, color: color)),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text(val, style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.w600, color: color)),
         ],
       ),
     );
@@ -542,7 +565,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   icon: const Icon(Icons.date_range, size: 16),
                   onPressed: () async {
                     final p = await showDatePicker(context: context, initialDate: logMulai, firstDate: DateTime(2023), lastDate: DateTime.now());
-                    if (p!= null) setState(() => logMulai = p);
+                    if (p != null) setState(() => logMulai = p);
                   },
                   label: Text("Mulai: ${DateFormat('dd/MM/yy').format(logMulai)}"),
                 ),
@@ -552,7 +575,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   icon: const Icon(Icons.date_range, size: 16),
                   onPressed: () async {
                     final p = await showDatePicker(context: context, initialDate: logSelesai, firstDate: DateTime(2023), lastDate: DateTime.now());
-                    if (p!= null) setState(() => logSelesai = p);
+                    if (p != null) setState(() => logSelesai = p);
                   },
                   label: Text("Sampai: ${DateFormat('dd/MM/yy').format(logSelesai)}"),
                 ),
@@ -565,13 +588,11 @@ class _DashboardPageState extends State<DashboardPage> {
             stream: (db.select(db.laporanHarian)..orderBy([(t) => OrderingTerm.desc(t.tanggal)])).watch(),
             builder: (c, snap) {
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-
               final start = DateTime(logMulai.year, logMulai.month, logMulai.day);
               final end = DateTime(logSelesai.year, logSelesai.month, logSelesai.day, 23, 59, 59);
-
               final filtered = snap.data!
-                 .where((l) => l.tanggal.isAfter(start.subtract(const Duration(seconds: 1))) && l.tanggal.isBefore(end.add(const Duration(seconds: 1))))
-                 .toList();
+                  .where((l) => l.tanggal.isAfter(start.subtract(const Duration(seconds: 1))) && l.tanggal.isBefore(end.add(const Duration(seconds: 1))))
+                  .toList();
 
               int accOmset = 0;
               int accLabaBersih = 0;
@@ -599,7 +620,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                   Expanded(
                     child: ListView.builder(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 80),
                       itemCount: filtered.length,
                       itemBuilder: (_, i) {
                         final l = filtered[i];
@@ -620,7 +641,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                         style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 12,
-                                            color: l.labaBersih >= 0? Colors.green.shade700 : Colors.red.shade700)),
+                                            color: l.labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700)),
                                   ],
                                 ),
                                 const Divider(height: 10),
@@ -648,53 +669,208 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  // HIJAU + MERAH FIX: Detail karyawan lengkap + batas maksimal padding
   void _klikTanggal(DateTime tgl) async {
     final dayKey = DateTime(tgl.year, tgl.month, tgl.day);
-    final absen = absenPerTanggal[dayKey]?? [];
+    final absen = absenPerTanggal[dayKey] ?? [];
     final laporan = await (db.select(db.laporanHarian)..where((t) => t.tanggal.equals(dayKey))).getSingleOrNull();
-    final bintang = await (db.select(db.bintangHarian)..where((t) => t.tanggal.equals(dayKey))).get();
+    final bintangList = await (db.select(db.bintangHarian)..where((t) => t.tanggal.equals(dayKey))).get();
+    final kasbonList = await (db.select(db.kasbonHarian)
+          ..where((t) => t.tanggal.isBiggerOrEqualValue(DateTime(tgl.year, tgl.month, tgl.day)))
+          ..where((t) => t.tanggal.isSmallerOrEqualValue(DateTime(tgl.year, tgl.month, tgl.day, 23, 59, 59))))
+        .get();
+
+    final mapBintang = {for (var b in bintangList) b.karyawanId: b.bintang};
+    final mapKasbon = {for (var k in kasbonList) k.karyawanId: k.nominal};
+
     final idsMasuk = absen.map((e) => e.karyawanId).toSet();
-    final bolong = allKaryawan.where((k) =>!idsMasuk.contains(k.id)).toList();
+    final bolong = allKaryawan.where((k) => !idsMasuk.contains(k.id)).toList();
 
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("LOG ${DateFormat('EEEE, dd MMM yyyy', 'id_ID').format(tgl)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            Text("Kehadiran: ${absen.length}/${allKaryawan.length} Karyawan (Bolong: ${bolong.length})",
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-            if (bintang.isNotEmpty) Text("⭐ Bintang: ${bintang.map((b) => "ID ${b.karyawanId}: ${b.bintang}★").join(', ')}", style: const TextStyle(fontSize: 11)),
-            const Divider(),
-            if (laporan!= null)...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(12)),
-                child: Column(
-                  children: [
-                    _buildRow("Penjualan", "Rp ${fmt.format(laporan.totalPenjualan)}", Colors.black),
-                    _buildRow("Beban Ops", "Rp ${fmt.format(laporan.bebanOperasional)}", Colors.black),
-                    _buildRow("Beban Gaji Hari Ini", "Rp ${fmt.format(laporan.totalGajiHariIni)}", Colors.black),
-                    _buildRow("Kasbon Karyawan", "Rp ${fmt.format(laporan.kasbonKaryawan)}", Colors.black),
-                    const Divider(),
-                    _buildRow("Laba Bersih", "Rp ${fmt.format(laporan.labaBersih)}", laporan.labaBersih >= 0? Colors.green.shade700 : Colors.red.shade700, isBold: true),
-                    if (absen.isNotEmpty && laporan.totalPenjualan > 0)...[
-                      const Divider(),
-                      _buildRow("Produktivitas / Karyawan", "Rp ${fmt.format((laporan.totalPenjualan / absen.length).round())}", Colors.blue.shade900, isBold: true),
-                    ]
-                  ],
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85, // MERAH: batas maksimal 85% biar kalender gak ketutup full
+      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (context, scrollController) {
+          return SingleChildScrollView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), // MERAH: padding bawah 32 biar gak mentok
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
                 ),
-              ),
-            ] else
-              const Text("Belum ada laporan operasional harian yang disimpan."),
-          ],
-        ),
+                const SizedBox(height: 12),
+                Text("LOG ${DateFormat('EEEE, dd MMM yyyy', 'id_ID').format(tgl)}",
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text("Kehadiran: ${absen.length}/${allKaryawan.length} Karyawan (Bolong: ${bolong.length})",
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                const SizedBox(height: 8),
+
+                // HIJAU: Detail lengkap per karyawan
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.green.shade200)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("DETAIL KARYAWAN HARI INI:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      if (absen.isEmpty)
+                        const Text("Belum ada absen", style: TextStyle(fontSize: 12))
+                      else
+                        FutureBuilder<Map<String, dynamic>>(
+                          future: () async {
+                            // Hitung akumulasi hadir bulan, bintang minggu, kasbon %
+                            final monday = tgl.subtract(Duration(days: tgl.weekday - 1));
+                            final sunday = monday.add(const Duration(days: 6));
+                            final startWeek = DateTime(monday.year, monday.month, monday.day);
+                            final endWeek = DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
+                            // Bintang minggu
+                            final bintangMingguAll = await (db.select(db.bintangHarian)
+                                  ..where((t) => t.tanggal.isBiggerOrEqualValue(startWeek))
+                                  ..where((t) => t.tanggal.isSmallerOrEqualValue(endWeek)))
+                                .get();
+                            // Kasbon minggu
+                            final kasbonMingguAll = await (db.select(db.kasbonHarian)
+                                  ..where((t) => t.tanggal.isBiggerOrEqualValue(startWeek))
+                                  ..where((t) => t.tanggal.isSmallerOrEqualValue(endWeek)))
+                                .get();
+                            return {
+                              'bintangMinggu': bintangMingguAll,
+                              'kasbonMinggu': kasbonMingguAll,
+                            };
+                          }(),
+                          builder: (c, snap) {
+                            final bintangMingguAll = snap.data?['bintangMinggu'] as List<BintangHarianData>? ?? [];
+                            final kasbonMingguAll = snap.data?['kasbonMinggu'] as List<KasbonHarianData>? ?? [];
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: absen.map((a) {
+                                final kar = allKaryawan.where((k) => k.id == a.karyawanId).firstOrNull;
+                                final kat = allKategori.where((k) => k.id == kar?.kategoriId).firstOrNull;
+                                final nama = kar?.nama ?? "ID ${a.karyawanId}";
+                                final tarif = kat?.tarifPerHari ?? 0;
+                                final gajiHari = a.tipeKerja.toUpperCase().contains("HALF") ? (tarif * 0.5).round() : tarif;
+                                final bintangHari = mapBintang[a.karyawanId] ?? 0;
+
+                                // 3. Akumulasi hadir bulan
+                                int hadirBulan = 0;
+                                absenPerTanggal.forEach((_, list) {
+                                  if (list.any((x) => x.karyawanId == a.karyawanId)) hadirBulan++;
+                                });
+                                final totalHariBulan = DateTime(tgl.year, tgl.month + 1, 0).day;
+
+                                // 4. Bintang trend minggu
+                                final bintangMingguKar = bintangMingguAll.where((b) => b.karyawanId == a.karyawanId).toList();
+                                double avgMinggu = 0;
+                                if (bintangMingguKar.isNotEmpty) {
+                                  avgMinggu = bintangMingguKar.map((e) => e.bintang).reduce((p, c) => p + c) / bintangMingguKar.length;
+                                }
+                                String trend = "";
+                                if (bintangMingguKar.length >= 2) {
+                                  trend = bintangHari >= avgMinggu ? "↑" : "↓";
+                                }
+
+                                // 5. Kasbon vs Gaji %
+                                final kasbonHari = mapKasbon[a.karyawanId] ?? 0;
+                                final kasbonMingguKar = kasbonMingguAll.where((k) => k.karyawanId == a.karyawanId).fold(0, (p, e) => p + e.nominal);
+                                final persenKasbon = tarif > 0 ? ((kasbonHari / tarif) * 100).toStringAsFixed(0) : "0";
+                                final persenKasbonMinggu = gajiHari > 0 ? ((kasbonMingguKar / (tarif * 3)) * 100).toStringAsFixed(0) : "0";
+                                String warning = "";
+                                if (int.tryParse(persenKasbon) != null && int.parse(persenKasbon) >= 50) warning = " ⚠️";
+                                if (kasbonMingguKar >= tarif) warning = " 🚨";
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "$nama | Rp${fmt.format(tarif)}/hr → Gaji: Rp${fmt.format(gajiHari)} | ${a.tipeKerja} | Jam ${DateFormat('HH:mm').format(a.jamMasuk)}",
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        "• Hadir: $hadirBulan/$totalHariBulan bln ini | ★$bintangHari hari ini | rata minggu ${avgMinggu.toStringAsFixed(1)} $trend | Kasbon hari Rp${fmt.format(kasbonHari)} ($persenKasbon% gaji)$warning",
+                                        style: TextStyle(fontSize: 10, color: Colors.grey.shade800),
+                                      ),
+                                      Text(
+                                        "• Kasbon minggu Rp${fmt.format(kasbonMingguKar)} ($persenKasbonMinggu% est) | Estimasi gaji minggu Rp${fmt.format(tarif * 3)}",
+                                        style: TextStyle(fontSize: 10, color: kasbonMingguKar > tarif * 0.5 ? Colors.red.shade700 : Colors.grey.shade600),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            );
+                          },
+                        ),
+                      const Divider(height: 12),
+                      // Saran penting
+                      const Text("INFO PENTING & SARAN:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.brown)),
+                      const SizedBox(height: 4),
+                      if (bolong.isNotEmpty)
+                        Text("• Bolong: ${bolong.map((e) => e.nama).join(', ')} - cek alasan", style: const TextStyle(fontSize: 11, color: Colors.red)),
+                      if (absen.where((a) => a.tipeKerja.toUpperCase().contains("HALF")).isNotEmpty)
+                        Text("• Ada ${absen.where((a) => a.tipeKerja.toUpperCase().contains("HALF")).length} ½ hari - produktivitas turun",
+                            style: const TextStyle(fontSize: 11, color: Colors.orange)),
+                      if (kasbonList.isNotEmpty)
+                        Text("• Total kasbon hari ini: Rp ${fmt.format(kasbonList.fold(0, (p, e) => p + e.nominal))} - potong di gaji mingguan",
+                            style: const TextStyle(fontSize: 11)),
+                      if (bintangList.where((b) => b.bintang <= 2).isNotEmpty)
+                        Text("• Ada ${bintangList.where((b) => b.bintang <= 2).length} karyawan bintang ≤2 - perlu evaluasi",
+                            style: const TextStyle(fontSize: 11, color: Colors.red)),
+                      if (bintangList.where((b) => b.bintang >= 4).isNotEmpty)
+                        Text("• ${bintangList.where((b) => b.bintang >= 4).length} karyawan bintang ≥4 - kasih bonus",
+                            style: const TextStyle(fontSize: 11, color: Colors.green)),
+                      if (laporan != null && laporan.totalPenjualan > 0 && absen.isNotEmpty)
+                        Text("• Produktivitas: Rp ${fmt.format((laporan.totalPenjualan / absen.length).round())} /karyawan",
+                            style: const TextStyle(fontSize: 11, color: Colors.blue)),
+                      if (absen.length == allKaryawan.length)
+                        const Text("• ✅ Semua hadir, performa bagus!", style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+                if (laporan != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(12)),
+                    child: Column(
+                      children: [
+                        _buildRow("Penjualan", "Rp ${fmt.format(laporan.totalPenjualan)}", Colors.black),
+                        _buildRow("Beban Ops", "Rp ${fmt.format(laporan.bebanOperasional)}", Colors.black),
+                        _buildRow("Beban Gaji Hari Ini", "Rp ${fmt.format(laporan.totalGajiHariIni)}", Colors.black),
+                        _buildRow("Kasbon Karyawan", "Rp ${fmt.format(laporan.kasbonKaryawan)}", Colors.black),
+                        const Divider(),
+                        _buildRow("Laba Bersih", "Rp ${fmt.format(laporan.labaBersih)}",
+                            laporan.labaBersih >= 0 ? Colors.green.shade700 : Colors.red.shade700, isBold: true),
+                        if (absen.isNotEmpty && laporan.totalPenjualan > 0) ...[
+                          const Divider(),
+                          _buildRow("Produktivitas / Karyawan", "Rp ${fmt.format((laporan.totalPenjualan / absen.length).round())}", Colors.blue.shade900, isBold: true),
+                        ]
+                      ],
+                    ),
+                  ),
+                ] else
+                  const Text("Belum ada laporan operasional harian yang disimpan."),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -732,18 +908,18 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.all(8),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 0.9),
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 80), // MERAH: bottom padding 80 biar gak mentok nav bar
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 0.85),
             itemCount: startWeekday + daysInMonth,
             itemBuilder: (_, i) {
               if (i < startWeekday) return const SizedBox();
               final day = i - startWeekday + 1;
               final tgl = DateTime(bulan.year, bulan.month, day);
-              final list = absenPerTanggal[DateTime(tgl.year, tgl.month, tgl.day)]?? [];
+              final list = absenPerTanggal[DateTime(tgl.year, tgl.month, tgl.day)] ?? [];
 
               Color warna = Colors.red.shade200;
               if (list.isNotEmpty) {
-                warna = (allKaryawan.isNotEmpty && list.length >= allKaryawan.length)? Colors.green.shade200 : Colors.yellow.shade200;
+                warna = (allKaryawan.isNotEmpty && list.length >= allKaryawan.length) ? Colors.green.shade200 : Colors.yellow.shade200;
               }
               return GestureDetector(
                 onTap: () => _klikTanggal(tgl),
